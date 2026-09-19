@@ -190,6 +190,8 @@ export interface AnalysisDraft {
   foods: DraftFood[]
   /** Set when the model could not do its job; the UI turns this into a recovery path. */
   failure_code: string | null
+  /** How long a rate-limited caller should wait, so the UI can say a number. */
+  retry_after_seconds?: number | null
 }
 
 export interface BarcodeDraft {

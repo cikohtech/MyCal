@@ -28,14 +28,19 @@ export function AppShell() {
         </p>
       )}
 
-      <main className="flex-1 px-4 pb-[104px] pt-safe">
+      <main className="flex-1 px-4 pb-8 pt-safe">
         <Outlet />
       </main>
 
+      {/* Sticky rather than fixed, on purpose. A fixed bar is anchored to the
+          layout viewport, so the moment somebody pinch-zooms it stops matching
+          what they can actually see: it drifts over the content, or off the
+          screen entirely, and pans away from the thumb. Sticky keeps it in the
+          document, which means it behaves at any magnification. */}
       {!fullScreenFlow && (
         <nav
           aria-label="Main"
-          className="glass hairline-t fixed inset-x-0 bottom-0 z-40 mx-auto w-full max-w-[560px]"
+          className="glass hairline-t sticky bottom-0 z-40 mx-auto mt-auto w-full max-w-[560px]"
           style={{ paddingBottom: 'max(6px, env(safe-area-inset-bottom, 0px))' }}
         >
           <div className="grid grid-cols-5 px-1 pt-1.5">

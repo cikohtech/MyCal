@@ -165,7 +165,10 @@
   }
 
   html {
+    /* Never let a browser resize type on its own — the scale is the reader's
+       to choose, and it is chosen by zooming. */
     -webkit-text-size-adjust: 100%;
+    text-size-adjust: 100%;
     -webkit-tap-highlight-color: transparent;
     background: var(--color-canvas);
   }
@@ -181,6 +184,19 @@
     -webkit-font-smoothing: antialiased;
     -moz-osx-font-smoothing: grayscale;
     overscroll-behavior-y: none;
+    /* Zoom far enough in — or open this on a desktop at 250% — and the layout
+       keeps narrowing until rows collide. A floor at the narrowest phone this
+       was ever designed for turns that into an ordinary horizontal pan, which
+       is the behaviour somebody zooming already expects. */
+    min-width: 320px;
+    /* A long unbroken food name must wrap rather than push the card wider. */
+    overflow-wrap: break-word;
+  }
+
+  /* Inputs at 16px or more are what stop iOS zooming the page on focus and
+     leaving it there, which reads as the layout breaking on its own. */
+  input, select, textarea {
+    font-size: max(1rem, 16px);
   }
 
   /* Numbers in this app are read against each other constantly. */
@@ -396,6 +412,17 @@
     );
     background-size: 200% 100%;
     animation: shimmer 1.5s linear infinite;
+  }
+
+  /* A photo being read in the background. The sweep says "still working"
+     without pretending to know how far along it is. */
+  @keyframes job-sweep {
+    0% { transform: translateX(-100%); }
+    100% { transform: translateX(400%); }
+  }
+  .job-sweep {
+    animation: job-sweep 1.25s cubic-bezier(0.45, 0, 0.55, 1) infinite;
+    border-radius: 999px;
   }
 
   .no-scrollbar { scrollbar-width: none; }

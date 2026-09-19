@@ -7,8 +7,11 @@ import type {
   AnalysisDraft, BarcodeDraft, FoodEntry, FoodEntryPart, FoodImage, IsoDate,
   NutritionTarget, Profile, Uuid, WeightEntry,
 } from '@/types/domain'
-import type { AppUser, DataStore, EntryPatch, NewEntry, NewTarget } from '@/services/db/types'
+import type {
+  AppUser, DataStore, EntryPatch, NewEntry, NewTarget, SignUpResult,
+} from '@/services/db/types'
 import { FOOD_IMAGE_BUCKET, requireSupabase } from '@/lib/supabase'
+import { authRedirectUrl, siteUrl } from '@/lib/site'
 import { uuid } from '@/lib/id'
 
 const SIGNED_URL_TTL_SECONDS = 60 * 10
@@ -46,26 +49,47 @@ export class SupabaseStore implements DataStore {
     return () => data.subscription.unsubscribe()
   }
 
-  async signUp(email: string, password: string): Promise<AppUser> {
-    const { data, error } = await requireSupabase().auth.signUp({ email, password })
+  async signUp(email: string, password: string): Promise<SignUpResult> {
+    const { data, error } = await requireSupabase().auth.signUp({
+      email,
+      password,
+      // Without this, Supabase mails the project's Site URL — which is how a
+      // deployed app sends people a link back to somebody's laptop.
+      options: { emailRedirectTo: authRedirectUrl() },
+    })
     if (error) throw new Error(error.message)
 
-    // With confirmations off — how this project is configured — sign-up hands
-    // back a session and the person is simply in. A project that still has
-    // them on returns none, so try the password once before giving up: that
-    // covers an account that already exists, and says something useful if the
-    // inbox really is the only way through.
-    if (!data.session) {
+    // With confirmations off, sign-up hands back a session and the person is
+    // simply in. With them on there is no session, and the inbox is the next
+    // step rather than a failure.
+    if (data.session) {
+      const user = toUser(data.user)
+      if (!user) throw new Error('Sign-up did not return an account.')
+      return { status: 'signed-in', user }
+    }
+
+    // An address that already has a confirmed account comes back looking like
+    // a fresh sign-up with no identities — Supabase does that on purpose, so
+    // the form cannot be used to discover who has an account. Trying the
+    // password is what separates "you already have one" from "check your mail".
+    if (!data.user?.identities?.length) {
       try {
-        return await this.signIn(email, password)
+        return { status: 'signed-in', user: await this.signIn(email, password) }
       } catch {
-        throw new Error(`Confirm ${email} from your inbox, then sign in.`)
+        return { status: 'confirm-email', email }
       }
     }
 
-    const user = toUser(data.user)
-    if (!user) throw new Error('Sign-up did not return an account.')
-    return user
+    return { status: 'confirm-email', email }
+  }
+
+  async resendConfirmation(email: string): Promise<void> {
+    const { error } = await requireSupabase().auth.resend({
+      type: 'signup',
+      email,
+      options: { emailRedirectTo: authRedirectUrl() },
+    })
+    if (error) throw new Error(error.message)
   }
 
   async signInWithGoogle(): Promise<void> {
@@ -73,7 +97,7 @@ export class SupabaseStore implements DataStore {
       provider: 'google',
       options: {
         // Back to the front door; the router sends people on from there.
-        redirectTo: `${window.location.origin}/`,
+        redirectTo: `${siteUrl()}/`,
         queryParams: { prompt: 'select_account' },
       },
     })

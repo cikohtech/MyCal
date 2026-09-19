@@ -7,14 +7,23 @@
  * what comes back with its retrieval time, and returns an editable draft. A
  * lookup is never an intake entry; only the user's explicit save creates one.
  */
-import { authenticate, corsHeaders, json, logFailure, withinRateLimit } from '../_shared/http.ts'
+import {
+  authenticate, corsHeaders, enforceRateLimit, envInt, json, logFailure, type RateRule,
+} from '../_shared/http.ts'
 
 const PROVIDER = 'https://world.openfoodfacts.org/api/v2/product'
 const FIELDS = [
   'code', 'product_name', 'brands', 'quantity', 'serving_size',
   'serving_quantity', 'nutriments',
 ].join(',')
-const RATE_LIMIT = { calls: 40, windowMs: 60_000 }
+// Cheaper than the model, but it still leaves our User-Agent on somebody
+// else's free API, so the same two-sided limit applies.
+const RATE_RULES: RateRule[] = [
+  { scope: 'user', limit: envInt('BARCODE_USER_PER_MINUTE', 30), windowSeconds: 60 },
+  { scope: 'user', limit: envInt('BARCODE_USER_PER_HOUR', 300), windowSeconds: 3600 },
+  { scope: 'ip', limit: envInt('BARCODE_IP_PER_MINUTE', 60), windowSeconds: 60 },
+  { scope: 'ip', limit: envInt('BARCODE_IP_PER_HOUR', 600), windowSeconds: 3600 },
+]
 const PROVIDER_TIMEOUT_MS = 8000
 // Packaging and panels change; anything older than this is re-fetched.
 const CACHE_MAX_AGE_MS = 30 * 24 * 60 * 60 * 1000
@@ -94,8 +103,9 @@ Deno.serve(async (request) => {
   const caller = await authenticate(request)
   if (!caller) return json({ error: 'Not signed in.' }, 401)
 
-  if (!withinRateLimit(caller.userId, RATE_LIMIT.calls, RATE_LIMIT.windowMs)) {
-    return notFound('', 'Too many lookups in a row. Wait a moment and try again.')
+  const quota = await enforceRateLimit(caller, request, 'barcode', RATE_RULES)
+  if (!quota.ok) {
+    return notFound('', `Too many lookups in a row. Try again in ${quota.retryAfterSeconds}s, or enter the label by hand.`)
   }
 
   let barcode: string

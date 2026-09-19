@@ -14,6 +14,7 @@ import {
   BarcodeIcon, CameraIcon, ChevronLeftIcon, ChevronRightIcon, LedgerIcon, PencilIcon,
 } from '@/components/Icons'
 import { MealList, mealSegments } from '@/features/dashboard/MealList'
+import { AnalysisJobCards } from '@/features/food-log/AnalysisJobCards'
 import { NutrientPanel } from '@/features/dashboard/NutrientPanel'
 import { addDays, compareIso, friendlyDate, longDate, parseIsoDate, weekdayName } from '@/lib/dates'
 import { calcWeightTrend, entryTotal, projectWeightChangeKg, sumDay } from '@/lib/calc'
@@ -69,6 +70,9 @@ export function Dashboard() {
           This day hasn’t happened yet. Food is always logged to the day you’re in.
         </Callout>
       )}
+
+      {/* Photos still being read, on the day they belong to. */}
+      <AnalysisJobCards date={date} />
 
       {/* The day, as one measure. */}
       <section className="card mt-4 px-5 pb-5 pt-6">

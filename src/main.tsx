@@ -4,6 +4,7 @@ import { BrowserRouter } from 'react-router-dom'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { App } from '@/app/App'
 import { SessionProvider } from '@/app/session'
+import { AnalysisJobsProvider } from '@/app/analysis-jobs'
 import { ToastProvider } from '@/components/Toast'
 import '@/index.css'
 
@@ -31,7 +32,11 @@ createRoot(document.getElementById('root')!).render(
       <BrowserRouter>
         <SessionProvider>
           <ToastProvider>
-            <App />
+            {/* Photo analysis outlives the screen that started it, so its queue
+                lives above the router rather than inside a route. */}
+            <AnalysisJobsProvider>
+              <App />
+            </AnalysisJobsProvider>
           </ToastProvider>
         </SessionProvider>
       </BrowserRouter>

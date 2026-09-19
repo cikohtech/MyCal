@@ -2,7 +2,13 @@
 <html lang="en">
   <head>
     <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+    <!-- Zoom is explicitly allowed. An installed PWA that pins the scale is a
+         PWA somebody with ordinary eyesight cannot read, and the layout below
+         is built to survive being magnified rather than to prevent it. -->
+    <meta
+      name="viewport"
+      content="width=device-width, initial-scale=1, minimum-scale=1, maximum-scale=5, user-scalable=yes, viewport-fit=cover, interactive-widget=resizes-content"
+    />
     <meta name="theme-color" media="(prefers-color-scheme: light)" content="#F2F2F7" />
     <meta name="theme-color" media="(prefers-color-scheme: dark)" content="#000000" />
     <meta name="apple-mobile-web-app-capable" content="yes" />

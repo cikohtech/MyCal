@@ -74,17 +74,22 @@ export function WeightChart({ raw, smoothed, unit, today }: Props) {
 
   return (
     <figure className="m-0">
+      {/* Scrubbing takes the horizontal drag and leaves everything else alone.
+          `touch-action: none` would have taken pinch-zoom with it, and a chart
+          of small numbers is exactly what somebody wants to magnify — so the
+          second finger is handed straight back to the browser. */}
       <svg
         ref={svgRef}
         viewBox={`0 0 ${WIDTH} ${HEIGHT}`}
-        className="h-auto w-full touch-none"
+        className="h-auto w-full"
+        style={{ touchAction: 'pan-y pinch-zoom' }}
         preserveAspectRatio="xMidYMid meet"
         role="img"
         aria-label={`Weight from ${friendlyDate(raw[0].recorded_on, today)} to ${friendlyDate(raw.at(-1)!.recorded_on, today)}`}
         onMouseMove={(e) => handleMove(e.clientX)}
         onMouseLeave={() => setHover(null)}
-        onTouchStart={(e) => handleMove(e.touches[0].clientX)}
-        onTouchMove={(e) => handleMove(e.touches[0].clientX)}
+        onTouchStart={(e) => { if (e.touches.length === 1) handleMove(e.touches[0].clientX) }}
+        onTouchMove={(e) => { if (e.touches.length === 1) handleMove(e.touches[0].clientX) }}
         onTouchEnd={() => setHover(null)}
       >
         {model.ticks.map((value) => (

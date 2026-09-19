@@ -11,6 +11,21 @@ const anonKey = import.meta.env.VITE_SUPABASE_ANON_KEY as string | undefined
  */
 export const isSupabaseConfigured = Boolean(url && anonKey)
 
+/**
+ * The query and hash exactly as the browser arrived with them.
+ *
+ * This has to be read here, above `createClient`, because `detectSessionInUrl`
+ * consumes a mailed link's parameters and rewrites the address the moment the
+ * client is constructed. When that consumption succeeds there is a session and
+ * nobody needs these; when it fails — the classic case being a link opened on a
+ * different device from the one that signed up — it fails silently and leaves a
+ * clean URL behind, and without a copy the confirmation screen has nothing to
+ * explain and nothing to retry.
+ */
+export const arrivalParams = typeof window !== 'undefined'
+  ? { search: window.location.search, hash: window.location.hash }
+  : { search: '', hash: '' }
+
 export const supabase: SupabaseClient | null = isSupabaseConfigured
   ? createClient(url!, anonKey!, {
       auth: {

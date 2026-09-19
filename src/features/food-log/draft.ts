@@ -134,11 +134,20 @@ export const ANALYSIS_FAILURES: Record<string, { title: string; body: string }> 
   },
 }
 
-export function failureCopy(code: string | null) {
-  return ANALYSIS_FAILURES[code ?? ''] ?? {
+export function failureCopy(code: string | null, retryAfterSeconds?: number | null) {
+  const copy = ANALYSIS_FAILURES[code ?? ''] ?? {
     title: 'That analysis did not work',
     body: 'Your photo is saved. Retry, or describe the meal yourself.',
   }
+  // A limit you can wait out is a different thing from a limit you cannot, so
+  // say which one this is rather than leaving someone to guess.
+  if (code === 'rate_limited' && retryAfterSeconds && retryAfterSeconds > 0) {
+    const wait = retryAfterSeconds >= 90
+      ? `${Math.ceil(retryAfterSeconds / 60)} minutes`
+      : `${Math.ceil(retryAfterSeconds)} seconds`
+    return { ...copy, body: `Try again in about ${wait}, or enter this one by hand.` }
+  }
+  return copy
 }
 
 export function draftFoods(draft: AnalysisDraft): DraftFood[] {

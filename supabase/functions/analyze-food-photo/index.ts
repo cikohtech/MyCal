@@ -10,7 +10,9 @@
  * writes a food entry: only the person reviewing the draft can do that.
  */
 import { resolveVisionClient } from '../_shared/ai.ts'
-import { authenticate, corsHeaders, json, logFailure, withinRateLimit } from '../_shared/http.ts'
+import {
+  authenticate, corsHeaders, enforceRateLimit, envInt, json, logFailure, type RateRule,
+} from '../_shared/http.ts'
 import { OUTPUT_SCHEMA, SYSTEM_PROMPT } from './prompt.ts'
 
 const BUCKET = 'food-images'
@@ -18,7 +20,26 @@ const SIGNED_URL_TTL_SECONDS = 120
 // A full plate broken into components measured 13-36s against gpt-5.5, so the
 // ceiling is set well above that: it is there to end a hung call, not a slow one.
 const ANALYSIS_TIMEOUT_MS = 90_000
-const RATE_LIMIT = { calls: 12, windowMs: 60_000 }
+
+/**
+ * What one account, and one address, may spend on the model.
+ *
+ * The account rules are the honest ceiling for a person logging meals: nobody
+ * photographs eight plates a minute, or a hundred and twenty a day. The address
+ * rules are the ones that matter for the bill — they are what a script cannot
+ * get around by making more accounts, since the accounts are free and the
+ * addresses are not. Both are generous enough that a real user with a shared
+ * office connection never meets them, and every one is overridable as a
+ * function secret if the shape of the traffic turns out different.
+ */
+const RATE_RULES: RateRule[] = [
+  { scope: 'user', limit: envInt('ANALYZE_USER_PER_MINUTE', 8), windowSeconds: 60 },
+  { scope: 'user', limit: envInt('ANALYZE_USER_PER_HOUR', 40), windowSeconds: 3600 },
+  { scope: 'user', limit: envInt('ANALYZE_USER_PER_DAY', 120), windowSeconds: 86_400 },
+  { scope: 'ip', limit: envInt('ANALYZE_IP_PER_MINUTE', 15), windowSeconds: 60 },
+  { scope: 'ip', limit: envInt('ANALYZE_IP_PER_HOUR', 80), windowSeconds: 3600 },
+  { scope: 'ip', limit: envInt('ANALYZE_IP_PER_DAY', 300), windowSeconds: 86_400 },
+]
 
 interface RequestBody {
   food_image_id?: string
@@ -52,9 +73,12 @@ interface ModelResult {
   }[]
 }
 
-function failed(code: string, status = 200) {
+function failed(code: string, status = 200, extra: Record<string, unknown> = {}) {
   return json(
-    { status: 'failed', analysis_id: null, model: null, notes: null, foods: [], failure_code: code },
+    {
+      status: 'failed', analysis_id: null, model: null, notes: null, foods: [],
+      failure_code: code, ...extra,
+    },
     status,
   )
 }
@@ -95,14 +119,6 @@ Deno.serve(async (request) => {
   const caller = await authenticate(request)
   if (!caller) return json({ error: 'Not signed in.' }, 401)
 
-  if (!withinRateLimit(caller.userId, RATE_LIMIT.calls, RATE_LIMIT.windowMs)) {
-    return failed('rate_limited')
-  }
-
-  // Whichever provider key is in the function's secrets decides this.
-  const ai = resolveVisionClient()
-  if (!ai) return failed('no_analysis_service')
-
   let body: RequestBody
   try {
     body = await request.json()
@@ -111,18 +127,12 @@ Deno.serve(async (request) => {
   }
   if (!body.food_image_id) return failed('bad_request', 400)
 
-  // Reading as the caller means RLS decides ownership, not our own comparison.
-  const { data: image, error: imageError } = await caller.asUser
-    .from('food_images')
-    .select('id, user_id, storage_path, mime_type, status')
-    .eq('id', body.food_image_id)
-    .maybeSingle()
-
-  if (imageError || !image) return json({ error: 'That photo does not exist.' }, 404)
-  if (image.status === 'deleted') return failed('unclear_image')
-
   // A repeated request for the same key returns the original analysis rather
-  // than paying for a second one.
+  // than paying for a second one — and it is checked before the quota, because
+  // handing back a result already on file costs nothing and should not count
+  // against anybody. The client resumes jobs this way after a reload, and
+  // being rate-limited out of your own finished estimate would be absurd. RLS
+  // scopes the lookup to the caller, so a guessed key finds nothing.
   if (body.idempotency_key) {
     const { data: previous } = await caller.asUser
       .from('ai_analyses')
@@ -133,6 +143,31 @@ Deno.serve(async (request) => {
       return json({ ...previous.result, analysis_id: previous.id })
     }
   }
+
+  // Deliberately a 200 with a failure code rather than a 429: the client
+  // invokes this through the Supabase SDK, which throws away the body of a
+  // non-2xx response — and the body is where the reason and the wait live.
+  const quota = await enforceRateLimit(caller, request, 'analyze', RATE_RULES)
+  if (!quota.ok) {
+    return failed('rate_limited', 200, {
+      retry_after_seconds: quota.retryAfterSeconds,
+      limited_scope: quota.scope,
+    })
+  }
+
+  // Whichever provider key is in the function's secrets decides this.
+  const ai = resolveVisionClient()
+  if (!ai) return failed('no_analysis_service')
+
+  // Reading as the caller means RLS decides ownership, not our own comparison.
+  const { data: image, error: imageError } = await caller.asUser
+    .from('food_images')
+    .select('id, user_id, storage_path, mime_type, status')
+    .eq('id', body.food_image_id)
+    .maybeSingle()
+
+  if (imageError || !image) return json({ error: 'That photo does not exist.' }, 404)
+  if (image.status === 'deleted') return failed('unclear_image')
 
   const { data: analysis } = await caller.asService
     .from('ai_analyses')

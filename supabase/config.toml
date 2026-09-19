@@ -17,17 +17,54 @@ file_size_limit = "10MiB"
 
 [auth]
 enabled = true
+# Local development only. The hosted project has its own copy of these two
+# under Authentication → URL Configuration, and that is the setting that
+# decides where a mailed link points: leave it on localhost and every user
+# gets a confirmation link to a machine they do not own. Set Site URL to the
+# deployed origin and list every origin that may receive a redirect.
 site_url = "http://localhost:5173"
-additional_redirect_urls = ["http://localhost:5173"]
+additional_redirect_urls = [
+  "http://localhost:5173",
+  "http://localhost:5173/auth/confirm",
+]
 jwt_expiry = 3600
 enable_signup = true
 
 [auth.email]
 enable_signup = true
-# No inbox detour: creating an account signs you straight in. The hosted
-# project needs the same — Authentication → Providers → Email → "Confirm
-# email" off — or sign-up hands back no session.
-enable_confirmations = false
+# Confirmations on: sign-up returns no session, the app shows the inbox step,
+# and the link comes back to /auth/confirm — which the client passes as
+# `emailRedirectTo`, so it does not depend on site_url being right.
+# Turn this off and sign-up signs people straight in instead; the app handles
+# both without a code change.
+enable_confirmations = true
+secure_password_change = true
+
+# The mail people actually receive. Supabase's defaults are a bare sentence and
+# a blue link; these are the app's own type, colour and voice, and they degrade
+# to plain inline styles in clients that strip a stylesheet.
+#
+# The hosted project does not read this file — paste each one into
+# Authentication → Emails → Templates, and set the subject lines alongside.
+[auth.email.template.confirmation]
+subject = "Confirm your email for My Cal"
+content_path = "./supabase/templates/confirmation.html"
+
+[auth.email.template.magic_link]
+subject = "Your My Cal sign-in link"
+content_path = "./supabase/templates/magic_link.html"
+
+[auth.email.template.recovery]
+subject = "Set a new My Cal password"
+content_path = "./supabase/templates/recovery.html"
+
+[auth.email.template.email_change]
+subject = "Confirm your new My Cal email"
+content_path = "./supabase/templates/email_change.html"
+
+[auth.email.template.invite]
+subject = "You’ve been invited to My Cal"
+content_path = "./supabase/templates/invite.html"
 
 # Local Google sign-in reads these from the shell; on the hosted project the
 # same pair goes in Authentication → Providers → Google, and Google's own

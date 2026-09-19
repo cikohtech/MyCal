@@ -7,7 +7,9 @@ import type {
   AnalysisDraft, BarcodeDraft, FoodEntry, FoodImage, IsoDate, NutritionTarget,
   Profile, Uuid, WeightEntry,
 } from '@/types/domain'
-import type { AppUser, DataStore, EntryPatch, NewEntry, NewTarget } from '@/services/db/types'
+import type {
+  AppUser, DataStore, EntryPatch, NewEntry, NewTarget, SignUpResult,
+} from '@/services/db/types'
 import { uuid } from '@/lib/id'
 import { compareIso } from '@/lib/dates'
 import { lookupOpenFoodFacts } from '@/services/openfoodfacts'
@@ -109,12 +111,15 @@ export class LocalStore implements DataStore {
     return () => listeners.delete(handler)
   }
 
-  async signUp(email: string): Promise<AppUser> {
+  async signUp(email: string): Promise<SignUpResult> {
     const user: AppUser = { id: LOCAL_USER_ID, email: email || null, isLocal: true }
     write('user', user)
     notify(user)
-    return user
+    return { status: 'signed-in', user }
   }
+
+  /** Nothing was ever mailed, so there is nothing to send again. */
+  async resendConfirmation(): Promise<void> {}
 
   async signInWithGoogle(): Promise<void> {
     throw new Error('Google sign-in needs a Supabase project. Here your data stays on this device.')

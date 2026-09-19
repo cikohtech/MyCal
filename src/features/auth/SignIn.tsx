@@ -5,7 +5,7 @@ import { TextField } from '@/components/Field'
 import { SegmentedControl } from '@/components/SegmentedControl'
 import { DayMeter } from '@/components/DayMeter'
 import { Callout } from '@/components/Callout'
-import { FlameIcon, GoogleMark } from '@/components/Icons'
+import { EnvelopeIcon, FlameIcon, GoogleMark } from '@/components/Icons'
 import { store } from '@/services/db'
 import { cn } from '@/lib/cn'
 import { kcal } from '@/lib/format'
@@ -29,6 +29,8 @@ export function SignIn() {
   const [error, setError] = useState<string | null>(null)
   /** Which button is working, so only that one shows a spinner. */
   const [pending, setPending] = useState<'form' | 'google' | null>(null)
+  /** Set when the project asks for a confirmed address before letting anyone in. */
+  const [awaitingInbox, setAwaitingInbox] = useState<string | null>(null)
 
   async function handleSubmit(event: FormEvent) {
     event.preventDefault()
@@ -41,9 +43,17 @@ export function SignIn() {
 
     setPending('form')
     try {
-      // Creating an account signs you straight in — there is no inbox step.
-      if (mode === 'sign-up') await store.signUp(email, password)
-      else await store.signIn(email, password)
+      if (mode === 'sign-up') {
+        const result = await store.signUp(email, password)
+        // A project with confirmations on has nothing more to give us until
+        // the link is clicked, so the screen says so instead of failing.
+        if (result.status === 'confirm-email') {
+          setAwaitingInbox(result.email)
+          return
+        }
+      } else {
+        await store.signIn(email, password)
+      }
       navigate('/today', { replace: true })
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : 'That did not work. Try again.')
@@ -63,6 +73,15 @@ export function SignIn() {
       setError(caught instanceof Error ? caught.message : 'Google sign-in did not work. Try again.')
       setPending(null)
     }
+  }
+
+  if (awaitingInbox) {
+    return (
+      <CheckYourInbox
+        email={awaitingInbox}
+        onBack={() => { setAwaitingInbox(null); setError(null) }}
+      />
+    )
   }
 
   return (
@@ -163,6 +182,62 @@ export function SignIn() {
       <p className="mx-auto mt-8 max-w-[38ch] text-center text-[0.78rem] leading-relaxed text-[var(--color-ink-3)]">
         My Cal estimates. It is a tracking aid, not medical advice, and every number it
         produces stays yours to correct.
+      </p>
+    </div>
+  )
+}
+
+/**
+ * The inbox step, when a project insists on one. It names the address it wrote
+ * to, because the commonest reason a confirmation never arrives is a typo two
+ * screens back, and it can write again without making anyone retype anything.
+ */
+function CheckYourInbox({ email, onBack }: { email: string; onBack: () => void }) {
+  const [sending, setSending] = useState(false)
+  const [sent, setSent] = useState(false)
+  const [problem, setProblem] = useState<string | null>(null)
+
+  async function resend() {
+    setSending(true)
+    setProblem(null)
+    try {
+      await store.resendConfirmation(email)
+      setSent(true)
+    } catch (caught) {
+      setProblem(caught instanceof Error ? caught.message : 'Could not send that again just now.')
+    } finally {
+      setSending(false)
+    }
+  }
+
+  return (
+    <div className="mx-auto flex min-h-[100dvh] w-full max-w-[420px] flex-col justify-center px-5 py-10 pt-safe">
+      <div className="pop-in flex flex-col items-center text-center">
+        <span className="grid h-[64px] w-[64px] place-items-center rounded-[19px] bg-[var(--color-accent)] text-[var(--color-accent-ink)] shadow-[var(--shadow-lift)]">
+          <EnvelopeIcon size={30} strokeWidth={1.7} />
+        </span>
+        <h1 className="mt-5 text-[2rem] leading-tight">Check your inbox</h1>
+        <p className="mt-2.5 max-w-[32ch] text-[0.98rem] leading-relaxed text-[var(--color-ink-2)]">
+          We sent a confirmation link to <span className="font-semibold text-[var(--color-ink)]">{email}</span>.
+          Open it and you are straight into your day.
+        </p>
+      </div>
+
+      <div className="rise mt-7 flex flex-col gap-3" style={{ animationDelay: '90ms' }}>
+        {sent && <Callout tone="note">Sent again. It can take a minute to arrive.</Callout>}
+        {problem && <Callout tone="problem">{problem}</Callout>}
+
+        <Button variant="secondary" size="lg" full loading={sending} onClick={resend}>
+          {sent ? 'Send it once more' : 'Resend the link'}
+        </Button>
+        <Button variant="ghost" size="md" full onClick={onBack}>
+          Use a different address
+        </Button>
+      </div>
+
+      <p className="mx-auto mt-8 max-w-[34ch] text-center text-[0.78rem] leading-relaxed text-[var(--color-ink-3)]">
+        Nothing arrived? Check spam, and make sure the address above is spelled the way
+        you meant it.
       </p>
     </div>
   )

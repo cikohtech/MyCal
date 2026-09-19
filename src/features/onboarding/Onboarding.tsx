@@ -14,7 +14,10 @@ import { useToast } from '@/components/Toast'
 import {
   CameraIcon, ChevronLeftIcon, FlameIcon, ScaleIcon, ShieldIcon,
 } from '@/components/Icons'
-import { ACTIVITY_LABELS, GOAL_LABELS, bmiBand, buildTarget, inToCm, lbToKg } from '@/lib/calc'
+import {
+  ACTIVITY_LABELS, GOAL_LABELS, bmiBand, buildTarget, cmToFeetInches, inToCm, kgToLb, lbToKg,
+  round,
+} from '@/lib/calc'
 import { detectTimezone, supportedTimezones } from '@/lib/dates'
 import { kcal } from '@/lib/format'
 
@@ -22,16 +25,36 @@ import { kcal } from '@/lib/format'
  * One question per screen. Setup is the first thing anybody does here, and a
  * single form asking for nine things at once is the surest way to lose them —
  * so each screen asks for one, validates it there, and moves on.
+ *
+ * Units used to be one of those screens, and it was the wrong question to ask
+ * on its own: a screen that shows "72.4 kg" and "174 cm" next to a Continue
+ * button reads as a form you are supposed to fill in, and people stopped and
+ * tried to type their own numbers into it. The choice now lives on the two
+ * screens where it changes something you can see — the height field and the
+ * weight field — and switching it converts whatever you have already typed
+ * rather than quietly reading a different set of boxes.
  */
 const STEPS = [
-  'welcome', 'name', 'units', 'age', 'height', 'weight',
+  'welcome', 'name', 'age', 'height', 'weight',
   'formula', 'activity', 'goal', 'plan',
 ] as const
 
 type Step = (typeof STEPS)[number]
 
 /** The welcome and the result bookend the questions; only these count. */
-const ASKED: Step[] = ['name', 'units', 'age', 'height', 'weight', 'formula', 'activity', 'goal']
+const ASKED: Step[] = ['name', 'age', 'height', 'weight', 'formula', 'activity', 'goal']
+
+/**
+ * Where to start the unit switch, now that nobody is asked outright. Three
+ * countries weigh themselves in pounds; the rest of the world does not, and
+ * guessing from the browser's own locale is right far more often than always
+ * opening on kilograms.
+ */
+function defaultUnits(): UnitPreference {
+  if (typeof navigator === 'undefined') return 'metric'
+  const locales = navigator.languages?.length ? navigator.languages : [navigator.language]
+  return locales.some((locale) => /-(US|LR|MM)\b/i.test(locale)) ? 'imperial' : 'metric'
+}
 
 interface Draft {
   display_name: string
@@ -85,7 +108,7 @@ export function Onboarding() {
     weight: '',
     activity_level: profile?.activity_level ?? 'light',
     goal: profile?.goal ?? 'maintain',
-    unit_preference: profile?.unit_preference ?? 'metric',
+    unit_preference: profile?.unit_preference ?? defaultUnits(),
     timezone: profile?.timezone ?? detectTimezone(),
     custom_calorie_target: '',
   })
@@ -94,6 +117,43 @@ export function Onboarding() {
     setDraft((current) => ({ ...current, [key]: value }))
 
   const metric = draft.unit_preference === 'metric'
+
+  /**
+   * Switching units mid-setup has to carry the numbers across. Height lives in
+   * two different sets of boxes depending on the unit, so simply flipping the
+   * preference would leave a height already typed in centimetres being read out
+   * of two empty feet-and-inches fields — a step that validated a moment ago,
+   * silently worth nothing.
+   */
+  function switchUnits(next: UnitPreference) {
+    setDraft((current) => {
+      if (current.unit_preference === next) return current
+
+      const wasMetric = current.unit_preference === 'metric'
+      const cm = wasMetric
+        ? Number(current.height_cm) || 0
+        : inToCm((Number(current.height_ft) || 0) * 12 + (Number(current.height_in) || 0))
+      const rawWeight = Number(current.weight) || 0
+      const kg = wasMetric ? rawWeight : lbToKg(rawWeight)
+
+      if (next === 'imperial') {
+        const { feet, inches } = cmToFeetInches(cm)
+        return {
+          ...current,
+          unit_preference: next,
+          height_ft: cm > 0 ? String(feet) : '',
+          height_in: cm > 0 ? String(inches) : '',
+          weight: kg > 0 ? String(kgToLb(kg)) : '',
+        }
+      }
+      return {
+        ...current,
+        unit_preference: next,
+        height_cm: cm > 0 ? String(round(cm)) : '',
+        weight: kg > 0 ? String(round(kg, 1)) : '',
+      }
+    })
+  }
 
   const heightCm = useMemo(() => {
     if (metric) return Number(draft.height_cm)
@@ -220,7 +280,7 @@ export function Onboarding() {
               Let’s set up<br />your day.
             </h1>
             <p className="mt-3 max-w-[32ch] text-[1.02rem] leading-relaxed text-[var(--color-ink-2)]">
-              Eight quick questions. They give you a calorie and macro target you can
+              Seven quick questions. They give you a calorie and macro target you can
               change at any time.
             </p>
           </div>
@@ -303,34 +363,6 @@ export function Onboarding() {
             </StepBody>
           )}
 
-          {step === 'units' && (
-            <StepBody
-              title="Which units do you think in?"
-              body="Display only — everything is stored in kilograms and centimetres, so you can switch later without touching your history."
-            >
-              <SegmentedControl<UnitPreference>
-                label="Units"
-                value={draft.unit_preference}
-                onChange={(value) => set('unit_preference', value)}
-                options={[
-                  { value: 'metric', label: 'kg · cm' },
-                  { value: 'imperial', label: 'lb · ft' },
-                ]}
-              />
-              <div className="mt-6 grid grid-cols-2 gap-3 text-center">
-                {[
-                  { label: 'Weight', value: metric ? '72.4 kg' : '159.6 lb' },
-                  { label: 'Height', value: metric ? '174 cm' : '5′ 9″' },
-                ].map((sample) => (
-                  <div key={sample.label} className="card px-4 py-3.5">
-                    <p className="text-[0.76rem] text-[var(--color-ink-3)]">{sample.label}</p>
-                    <p className="tnum mt-0.5 text-[1.15rem] font-semibold">{sample.value}</p>
-                  </div>
-                ))}
-              </div>
-            </StepBody>
-          )}
-
           {step === 'age' && (
             <StepBody title="How old are you?" body="The equation weights age directly." center>
               <HeroNumberField
@@ -342,25 +374,35 @@ export function Onboarding() {
 
           {step === 'height' && (
             <StepBody title="How tall are you?" body="Used for your estimated burn and your BMI." center>
-              {metric ? (
-                <HeroNumberField
-                  label="Height in centimetres" value={draft.height_cm}
-                  onChange={(value) => set('height_cm', value)} unit="cm" placeholder="174" autoFocus
+              <div className="w-full">
+                {metric ? (
+                  <HeroNumberField
+                    label="Height in centimetres" value={draft.height_cm}
+                    onChange={(value) => set('height_cm', value)} unit="cm" placeholder="174" autoFocus
+                  />
+                ) : (
+                  <div className="flex items-baseline justify-center gap-5">
+                    <HeroNumberField
+                      label="Height in feet" value={draft.height_ft}
+                      onChange={(value) => set('height_ft', value)} unit="ft" placeholder="5"
+                      inputMode="numeric" autoFocus
+                    />
+                    <HeroNumberField
+                      label="Height in inches" value={draft.height_in}
+                      onChange={(value) => set('height_in', value)} unit="in" placeholder="9"
+                      inputMode="numeric"
+                    />
+                  </div>
+                )}
+                <UnitSwitch
+                  value={draft.unit_preference}
+                  onChange={switchUnits}
+                  options={[
+                    { value: 'metric', label: 'cm' },
+                    { value: 'imperial', label: 'ft · in' },
+                  ]}
                 />
-              ) : (
-                <div className="flex items-baseline justify-center gap-5">
-                  <HeroNumberField
-                    label="Height in feet" value={draft.height_ft}
-                    onChange={(value) => set('height_ft', value)} unit="ft" placeholder="5"
-                    inputMode="numeric" autoFocus
-                  />
-                  <HeroNumberField
-                    label="Height in inches" value={draft.height_in}
-                    onChange={(value) => set('height_in', value)} unit="in" placeholder="9"
-                    inputMode="numeric"
-                  />
-                </div>
-              )}
+              </div>
             </StepBody>
           )}
 
@@ -370,10 +412,20 @@ export function Onboarding() {
               body="Saved as your first weigh-in, so your trend line starts from here."
               center
             >
-              <HeroNumberField
-                label="Weight" value={draft.weight} onChange={(value) => set('weight', value)}
-                unit={metric ? 'kg' : 'lb'} placeholder={metric ? '72' : '160'} autoFocus
-              />
+              <div className="w-full">
+                <HeroNumberField
+                  label="Weight" value={draft.weight} onChange={(value) => set('weight', value)}
+                  unit={metric ? 'kg' : 'lb'} placeholder={metric ? '72' : '160'} autoFocus
+                />
+                <UnitSwitch
+                  value={draft.unit_preference}
+                  onChange={switchUnits}
+                  options={[
+                    { value: 'metric', label: 'kg' },
+                    { value: 'imperial', label: 'lb' },
+                  ]}
+                />
+              </div>
             </StepBody>
           )}
 
@@ -512,6 +564,31 @@ export function Onboarding() {
           )}
         </div>
       </form>
+    </div>
+  )
+}
+
+/**
+ * A quiet unit switch under the number it governs. Narrow and centred so it
+ * reads as a label on the field rather than a second question — the mistake
+ * the old standalone screen made.
+ */
+function UnitSwitch({
+  value, onChange, options,
+}: {
+  value: UnitPreference
+  onChange: (value: UnitPreference) => void
+  options: { value: UnitPreference; label: string }[]
+}) {
+  return (
+    <div className="mx-auto mt-7 w-[min(220px,100%)]">
+      <SegmentedControl<UnitPreference>
+        label="Units" size="sm" value={value} onChange={onChange} options={options}
+      />
+      <p className="mt-2.5 text-center text-[0.76rem] leading-snug text-[var(--color-ink-3)]">
+        Display only. Everything is stored in kilograms and centimetres, so switching
+        later leaves your history alone.
+      </p>
     </div>
   )
 }

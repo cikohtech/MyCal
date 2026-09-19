@@ -4,6 +4,7 @@ import { useSession } from '@/app/session'
 import { AppShell } from '@/app/AppShell'
 import { Spinner } from '@/components/Button'
 import { SignIn } from '@/features/auth/SignIn'
+import { AuthConfirm } from '@/features/auth/AuthConfirm'
 import { Dashboard } from '@/features/dashboard/Dashboard'
 import { UpdatePrompt } from '@/app/UpdatePrompt'
 
@@ -56,6 +57,8 @@ export function App() {
       <Suspense fallback={<Loading />}>
         <Routes>
           <Route path="/" element={<Front />} />
+          {/* Where every mailed link lands, signed in or not. */}
+          <Route path="/auth/confirm" element={<AuthConfirm />} />
           <Route path="/setup" element={<RequireUser><Onboarding /></RequireUser>} />
           <Route element={<RequireSetup><AppShell /></RequireSetup>}>
             <Route path="/today" element={<Dashboard />} />

@@ -50,7 +50,7 @@ PWA work should start with a valid web manifest, icons, and a conservative servi
 
 ## Supabase architecture
 
-- **Auth:** Supabase Auth provides session management and the `auth.uid()` principal. Two entry points share it: email and password, with confirmations off so sign-up returns a session and signs the person straight in, and Google OAuth over PKCE, which returns to the app's front door and is picked up by the same `onAuthStateChange` listener. Both produce the same principal, so nothing downstream distinguishes them; further identity providers are independent of application data.
+- **Auth:** Supabase Auth provides session management and the `auth.uid()` principal. Two entry points share it: email and password, and Google OAuth over PKCE, which returns to the app's front door and is picked up by the same `onAuthStateChange` listener. Email confirmation is a project setting the client handles either way — with it off, sign-up returns a session and the person lands on setup; with it on, sign-up returns none, the UI shows an inbox step with a resend, and the mailed link lands on `/auth/confirm`, which redeems a token hash, a PKCE code or an already-detected session. Every mailed link carries an explicit `emailRedirectTo` built from `VITE_SITE_URL` or the serving origin, so a deployment never inherits a stale project-level Site URL. Both produce the same principal, so nothing downstream distinguishes them; further identity providers are independent of application data.
 - **PostgreSQL:** source of truth for profiles, targets, food entries, analysis metadata, reference foods, and weight data.
 - **RLS:** enabled on every user-owned table. Browser access is restricted to records where `user_id = auth.uid()`.
 - **Storage:** a private `food-images` bucket. Object keys begin with the owner UUID and policies validate that prefix.
@@ -104,7 +104,7 @@ Validate MIME type, file size, and decoded image dimensions before or at upload.
 
 ## AI processing architecture
 
-Photo analysis is asynchronous from the UI’s perspective, even if the first MVP function completes it synchronously:
+Photo analysis is asynchronous from the UI’s perspective, even though the function completes it synchronously. The client owns that asynchrony: a capture becomes a job in an app-level queue that outlives the screen which started it, the shutter returns immediately to the day view, and the job's state is rendered as a card there. The queue persists enough to `sessionStorage` (image id, idempotency key, stage, the returned draft) that a reload resumes rather than restarts — resuming replays the same idempotency key, which returns the analysis already paid for and is deliberately checked ahead of the rate limit.
 
 1. Client uploads a private photo and creates/requests an `ai_analyses` record.
 2. `analyze-food-photo` Edge Function validates the JWT, `food_image` ownership, and image state.
@@ -180,7 +180,7 @@ Target calculation uses the version active on the date being shown; food-entry n
 - Keep service-role, AI, and product-provider secrets exclusively in function/server secret storage.
 - Validate input schemas, numeric ranges, file types/sizes, enum values, and all foreign-key ownership at each boundary.
 - Use short-lived signed URLs and minimum scopes for image access; do not make food photos public.
-- Rate-limit upload, analysis, and barcode lookup endpoints per user/IP; cap image size and request payloads to control cost and abuse.
+- Rate-limit analysis and barcode lookup per user **and** per IP, both of which must pass: the account limit bounds one person, the address limit bounds one person holding twenty free accounts. Counters live in a shared `rate_limit_counters` table under fixed windows (minute, hour, day) rather than in an edge instance's memory, so every instance agrees on the total and a recycle does not reset the quota. Addresses are salted-hashed before storage. An unreachable counter degrades to a per-instance in-memory limiter rather than opening the gate. Cap image size and request payloads to control cost and abuse.
 - Store the minimum AI response needed for review/audit, sanitize error messages, and avoid sensitive-data logging.
 - Provide deletion paths for photos and account-associated data; define retention explicitly before production.
 - Treat nutrition and weight records as sensitive personal data: use TLS, encrypted managed storage, least privilege, and appropriate privacy disclosures/consent.

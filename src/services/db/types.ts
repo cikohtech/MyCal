@@ -10,6 +10,15 @@ export interface AppUser {
   isLocal: boolean
 }
 
+/**
+ * Creating an account either lets you straight in or sends you to your inbox,
+ * depending on whether the project asks for confirmation. Both are ordinary
+ * outcomes, so neither is an error.
+ */
+export type SignUpResult =
+  | { status: 'signed-in'; user: AppUser }
+  | { status: 'confirm-email'; email: string }
+
 export type NewEntry = Omit<FoodEntry, 'id' | 'user_id' | 'created_at' | 'updated_at' | 'parts'> & {
   parts?: Omit<FoodEntryPart, 'id' | 'food_entry_id' | 'created_at'>[]
 }
@@ -33,8 +42,10 @@ export interface DataStore {
 
   getUser(): Promise<AppUser | null>
   onAuthChange(handler: (user: AppUser | null) => void): () => void
-  /** Creates the account and returns it already signed in — no inbox detour. */
-  signUp(email: string, password: string): Promise<AppUser>
+  /** Creates the account, and says whether an inbox step stands in the way. */
+  signUp(email: string, password: string): Promise<SignUpResult>
+  /** Sends the confirmation mail again, to the same address. */
+  resendConfirmation(email: string): Promise<void>
   signIn(email: string, password: string): Promise<AppUser>
   /** Hands the browser off to Google; the session arrives on the way back. */
   signInWithGoogle(): Promise<void>

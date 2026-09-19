@@ -120,6 +120,13 @@ export const ImageIcon = (p: IconProps) => (
   </Icon>
 )
 
+export const EnvelopeIcon = (p: IconProps) => (
+  <Icon {...p}>
+    <rect x="2.75" y="5" width="18.5" height="14" rx="2.6" />
+    <path d="m3.6 7 7.3 5.4a2 2 0 0 0 2.2 0L20.4 7" />
+  </Icon>
+)
+
 export const RefreshIcon = (p: IconProps) => (
   <Icon {...p}>
     <path d="M20 12a8 8 0 1 1-2.4-5.7" />
