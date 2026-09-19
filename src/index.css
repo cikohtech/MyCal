@@ -1,0 +1,409 @@
+@import 'tailwindcss';
+@import './fonts.css';
+
+/* ------------------------------------------------------------------
+   My Cal — design tokens
+
+   A native-feeling iOS surface: a soft grouped background, white cards
+   that float on it with hairline edges, one near-black action colour and
+   a single blue tint for anything interactive. Macros keep their own
+   categorical hues; meals step along the tint so the day reads as one
+   quantity subdivided rather than five competing categories.
+   ------------------------------------------------------------------ */
+
+@theme {
+  --font-sans: -apple-system, BlinkMacSystemFont, 'SF Pro Text', 'SF Pro Display',
+    'Inter', 'Archivo', system-ui, 'Segoe UI', Roboto, sans-serif;
+  --font-display: -apple-system, BlinkMacSystemFont, 'SF Pro Display', 'SF Pro Text',
+    'Inter', 'Archivo', system-ui, 'Segoe UI', Roboto, sans-serif;
+
+  /* Surfaces & ink — light */
+  --color-canvas: #f2f2f7;
+  --color-paper: #ffffff;
+  --color-raised: #ffffff;
+  --color-fill: #eeeef3;
+  --color-fill-2: #e6e6ec;
+  --color-ink: #1c1c1e;
+  --color-ink-2: #6e6e73;
+  --color-ink-3: #a5a5aa;
+  --color-line: #e7e7ec;
+  --color-line-strong: #d6d6dc;
+  --color-track: #eaeaf0;
+
+  /* Action — a near-black fill, the way modern iOS-native apps commit. */
+  --color-accent: #17181c;
+  --color-accent-ink: #ffffff;
+  --color-accent-soft: #f0f0f4;
+
+  /* Tint — links, selected tabs, focus, anything you can press through. */
+  --color-tint: #0a6cf0;
+  --color-tint-ink: #0a58c4;
+  --color-tint-wash: #eaf2fe;
+
+  /* Macros (categorical, fixed order: protein, carbs, fat) */
+  --color-protein: #12a065;
+  --color-carbs: #db8500;
+  --color-fat: #8a57e0;
+  --color-fibre: #7c8794;
+
+  /* Status */
+  --color-good: #12a065;
+  --color-warn: #b87400;
+  --color-critical: #dc3226;
+
+  /* Meal steps — one ledger quantity subdivided through the day, so these
+     step along the tint's hue rather than competing as separate categories. */
+  --color-meal-breakfast: #9cc8ff;
+  --color-meal-lunch: #57a0f7;
+  --color-meal-dinner: #0a6cf0;
+  --color-meal-snack: #c8dfff;
+  --color-meal-unassigned: #d6dbe2;
+
+  --radius-card: 16px;
+  --radius-field: 12px;
+  --radius-sheet: 26px;
+}
+
+@layer theme {
+  :root {
+    /* Cards sit on the canvas rather than in it: almost no shadow, a hairline
+       edge. Real elevation is reserved for things that actually float. */
+    --shadow-card: 0 1px 2px rgb(16 18 24 / 0.04);
+    --shadow-lift: 0 4px 16px -6px rgb(16 18 24 / 0.16), 0 1px 3px rgb(16 18 24 / 0.06);
+    --shadow-float: 0 10px 30px -8px rgb(16 18 24 / 0.26), 0 2px 6px rgb(16 18 24 / 0.08);
+    --hairline: rgb(60 60 67 / 0.14);
+    color-scheme: light;
+  }
+
+  /* Dark is a selected set of steps, not an inversion. */
+  :root[data-theme='dark'] {
+    color-scheme: dark;
+    --color-canvas: #000000;
+    --color-paper: #1c1c1e;
+    --color-raised: #2c2c2e;
+    --color-fill: #2c2c2e;
+    --color-fill-2: #3a3a3c;
+    --color-ink: #f5f5f7;
+    --color-ink-2: #98989f;
+    --color-ink-3: #6e6e73;
+    --color-line: #34343a;
+    --color-line-strong: #48484a;
+    --color-track: #2c2c2e;
+
+    --color-accent: #f5f5f7;
+    --color-accent-ink: #1c1c1e;
+    --color-accent-soft: #2c2c2e;
+
+    --color-tint: #4c9bff;
+    --color-tint-ink: #7fb6ff;
+    --color-tint-wash: #16243a;
+
+    --color-protein: #2ecb87;
+    --color-carbs: #f0a52b;
+    --color-fat: #a985ec;
+    --color-fibre: #93a1b0;
+
+    --color-good: #2ecb87;
+    --color-warn: #f0a52b;
+    --color-critical: #ff6155;
+
+    --color-meal-breakfast: #2f5f9c;
+    --color-meal-lunch: #2b7ae0;
+    --color-meal-dinner: #4c9bff;
+    --color-meal-snack: #22456f;
+    --color-meal-unassigned: #3c4249;
+
+    --shadow-card: none;
+    --shadow-lift: 0 4px 16px -6px rgb(0 0 0 / 0.6);
+    --shadow-float: 0 10px 30px -8px rgb(0 0 0 / 0.8), 0 2px 6px rgb(0 0 0 / 0.4);
+    --hairline: rgb(235 235 245 / 0.18);
+  }
+}
+
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme='light']) {
+    color-scheme: dark;
+    --color-canvas: #000000;
+    --color-paper: #1c1c1e;
+    --color-raised: #2c2c2e;
+    --color-fill: #2c2c2e;
+    --color-fill-2: #3a3a3c;
+    --color-ink: #f5f5f7;
+    --color-ink-2: #98989f;
+    --color-ink-3: #6e6e73;
+    --color-line: #34343a;
+    --color-line-strong: #48484a;
+    --color-track: #2c2c2e;
+    --color-accent: #f5f5f7;
+    --color-accent-ink: #1c1c1e;
+    --color-accent-soft: #2c2c2e;
+    --color-tint: #4c9bff;
+    --color-tint-ink: #7fb6ff;
+    --color-tint-wash: #16243a;
+    --color-protein: #2ecb87;
+    --color-carbs: #f0a52b;
+    --color-fat: #a985ec;
+    --color-fibre: #93a1b0;
+    --color-good: #2ecb87;
+    --color-warn: #f0a52b;
+    --color-critical: #ff6155;
+    --color-meal-breakfast: #2f5f9c;
+    --color-meal-lunch: #2b7ae0;
+    --color-meal-dinner: #4c9bff;
+    --color-meal-snack: #22456f;
+    --color-meal-unassigned: #3c4249;
+    --shadow-card: none;
+    --shadow-lift: 0 4px 16px -6px rgb(0 0 0 / 0.6);
+    --shadow-float: 0 10px 30px -8px rgb(0 0 0 / 0.8), 0 2px 6px rgb(0 0 0 / 0.4);
+    --hairline: rgb(235 235 245 / 0.18);
+  }
+}
+
+@layer base {
+  * {
+    border-color: var(--color-line);
+  }
+
+  html {
+    -webkit-text-size-adjust: 100%;
+    -webkit-tap-highlight-color: transparent;
+    background: var(--color-canvas);
+  }
+
+  body {
+    margin: 0;
+    background: var(--color-canvas);
+    color: var(--color-ink);
+    font-family: var(--font-sans);
+    font-size: 17px;
+    line-height: 1.45;
+    letter-spacing: -0.011em;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+    overscroll-behavior-y: none;
+  }
+
+  /* Numbers in this app are read against each other constantly. */
+  .tnum {
+    font-variant-numeric: tabular-nums;
+    font-feature-settings: 'tnum' 1;
+  }
+
+  h1, h2, h3 {
+    font-family: var(--font-display);
+    font-weight: 700;
+    letter-spacing: -0.024em;
+    line-height: 1.15;
+    margin: 0;
+  }
+
+  button, input, select, textarea {
+    font: inherit;
+    color: inherit;
+    letter-spacing: inherit;
+  }
+
+  /* Chrome is chrome: it should never select like body copy. */
+  button, label, nav, [role='tab'] {
+    -webkit-user-select: none;
+    user-select: none;
+  }
+
+  :focus-visible {
+    outline: 2px solid var(--color-tint);
+    outline-offset: 2px;
+    border-radius: 6px;
+  }
+
+  ::selection {
+    background: color-mix(in oklab, var(--color-tint) 26%, transparent);
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    *, *::before, *::after {
+      animation-duration: 0.01ms !important;
+      animation-iteration-count: 1 !important;
+      transition-duration: 0.01ms !important;
+    }
+  }
+}
+
+@layer components {
+  /* ------------------------------ surfaces ------------------------------ */
+
+  .card {
+    background: var(--color-paper);
+    border-radius: var(--radius-card);
+    box-shadow: var(--shadow-card);
+  }
+
+  /* An inset grouped list: one white block, rows divided by a hairline that
+     starts where the text starts, the way a native list does. */
+  .list-group {
+    background: var(--color-paper);
+    border-radius: var(--radius-card);
+    box-shadow: var(--shadow-card);
+    overflow: hidden;
+  }
+  .list-group > * + * {
+    box-shadow: inset 0 0.5px 0 0 var(--hairline);
+  }
+  .list-row {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+    min-height: 46px;
+    padding: 0.7rem 1rem;
+    width: 100%;
+    text-align: left;
+  }
+
+  /* A caption under a group, the way iOS footnotes a settings section. */
+  .group-note {
+    padding: 0.55rem 1rem 0;
+    font-size: 0.78rem;
+    line-height: 1.45;
+    color: var(--color-ink-3);
+  }
+  .group-label {
+    padding: 0 1rem 0.4rem;
+    font-size: 0.76rem;
+    font-weight: 600;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+    color: var(--color-ink-3);
+  }
+
+  /* Bars and sheets that sit over scrolling content. */
+  .glass {
+    background: color-mix(in oklab, var(--color-paper) 78%, transparent);
+    backdrop-filter: saturate(180%) blur(20px);
+    -webkit-backdrop-filter: saturate(180%) blur(20px);
+  }
+  .glass-canvas {
+    background: color-mix(in oklab, var(--color-canvas) 78%, transparent);
+    backdrop-filter: saturate(180%) blur(20px);
+    -webkit-backdrop-filter: saturate(180%) blur(20px);
+  }
+
+  .hairline-t { box-shadow: inset 0 0.5px 0 0 var(--hairline); }
+  .hairline-b { box-shadow: inset 0 -0.5px 0 0 var(--hairline); }
+
+  /* ------------------------------- fields ------------------------------- */
+
+  /* Filled, borderless, the iOS way — the field is a shape, not a box. */
+  .field {
+    width: 100%;
+    background: var(--color-fill);
+    border: 1px solid transparent;
+    border-radius: var(--radius-field);
+    padding: 0.72rem 0.9rem;
+    font-size: 1.0rem;
+    transition: background-color 140ms ease, border-color 140ms ease, box-shadow 140ms ease;
+  }
+  .field:focus {
+    outline: none;
+    background: var(--color-paper);
+    border-color: var(--color-tint);
+    box-shadow: 0 0 0 3.5px color-mix(in oklab, var(--color-tint) 16%, transparent);
+  }
+  .field::placeholder { color: var(--color-ink-3); }
+
+  /* One big number you type — used through onboarding and weigh-ins. */
+  .field-hero {
+    width: 100%;
+    background: transparent;
+    border: 0;
+    text-align: center;
+    font-family: var(--font-display);
+    font-size: 3.6rem;
+    font-weight: 700;
+    letter-spacing: -0.03em;
+    line-height: 1;
+    padding: 0.2rem 0;
+  }
+  .field-hero:focus { outline: none; }
+  .field-hero::placeholder { color: var(--color-ink-3); opacity: 0.45; }
+  .field-hero::-webkit-outer-spin-button,
+  .field-hero::-webkit-inner-spin-button { -webkit-appearance: none; margin: 0; }
+
+  /* ------------------------------ feedback ------------------------------ */
+
+  /* Every tappable surface answers the thumb. */
+  .press {
+    transition: transform 140ms cubic-bezier(0.2, 0.8, 0.2, 1), opacity 140ms ease,
+      background-color 140ms ease;
+  }
+  .press:active { transform: scale(0.97); }
+  .press-sm:active { transform: scale(0.985); }
+
+  /* ----------------------------- animation ------------------------------ */
+
+  @keyframes meter-fill {
+    from { transform: scaleX(0); }
+    to { transform: scaleX(1); }
+  }
+  .meter-seg {
+    transform-origin: left center;
+    animation: meter-fill 560ms cubic-bezier(0.22, 1, 0.36, 1) both;
+  }
+
+  @keyframes ring-draw {
+    from { stroke-dashoffset: var(--ring-length); }
+  }
+  .ring-seg { animation: ring-draw 760ms cubic-bezier(0.22, 1, 0.36, 1) both; }
+
+  @keyframes sheet-up {
+    from { transform: translateY(18px); opacity: 0; }
+    to { transform: none; opacity: 1; }
+  }
+
+  @keyframes fade-in {
+    from { opacity: 0; }
+    to { opacity: 1; }
+  }
+  .fade-in { animation: fade-in 200ms ease both; }
+
+  @keyframes rise {
+    from { opacity: 0; transform: translateY(8px); }
+    to { opacity: 1; transform: none; }
+  }
+  .rise { animation: rise 340ms cubic-bezier(0.22, 1, 0.36, 1) both; }
+
+  /* Wizard pages arrive from the side, like a pushed navigation stack. */
+  @keyframes push-in {
+    from { opacity: 0; transform: translateX(22px); }
+    to { opacity: 1; transform: none; }
+  }
+  .push-in { animation: push-in 320ms cubic-bezier(0.22, 1, 0.36, 1) both; }
+
+  @keyframes pop-in {
+    0% { opacity: 0; transform: scale(0.94); }
+    100% { opacity: 1; transform: none; }
+  }
+  .pop-in { animation: pop-in 360ms cubic-bezier(0.22, 1, 0.36, 1) both; }
+
+  @keyframes shimmer {
+    from { background-position: -200% 0; }
+    to { background-position: 200% 0; }
+  }
+  .skeleton {
+    background: linear-gradient(
+      90deg,
+      var(--color-fill) 25%,
+      color-mix(in oklab, var(--color-fill) 40%, var(--color-paper)) 50%,
+      var(--color-fill) 75%
+    );
+    background-size: 200% 100%;
+    animation: shimmer 1.5s linear infinite;
+  }
+
+  .no-scrollbar { scrollbar-width: none; }
+  .no-scrollbar::-webkit-scrollbar { display: none; }
+}
+
+/* Safe areas for installed iOS */
+.pb-safe { padding-bottom: max(0.75rem, env(safe-area-inset-bottom)); }
+.pt-safe { padding-top: max(0.5rem, env(safe-area-inset-top)); }
+.pt-safe-0 { padding-top: env(safe-area-inset-top, 0px); }
+.pb-safe-0 { padding-bottom: env(safe-area-inset-bottom, 0px); }
