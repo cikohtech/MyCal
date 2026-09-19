@@ -69,6 +69,22 @@ otherwise). `OPENAI_MODEL` and `ANTHROPIC_MODEL` override the defaults of
 structured JSON. With no key set, the photo screen reports that analysis is
 unavailable and the rest of the app carries on.
 
+### Deploying the client
+
+`vercel.json` carries one rewrite that the app does not work without. My Cal is a
+single-page app: the router owns `/today`, `/weight`, `/auth/confirm` and the
+rest, and none of them exist as files. Without the fallback to `index.html`,
+the host answers every one of them with a 404 — refreshing the page anywhere
+but the front door breaks, and so does a confirmation link mailed to somebody's
+inbox. Vercel checks the filesystem before applying a rewrite, so `/icons`,
+`/assets` and `/sw.js` are still served as themselves. Any other host needs the
+same rule under its own name (`try_files`, `historyApiFallback`, a `_redirects`
+line).
+
+The headers beside it matter for the same reason: `/assets/*` is content-hashed
+so it is cached forever, and `sw.js` is never cached at all, because a stale
+service worker pins people to an old build indefinitely.
+
 ### The front door, once it is deployed
 
 Three things in the Supabase dashboard, under **Authentication**:
