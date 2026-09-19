@@ -90,7 +90,7 @@ export function SignIn() {
         <span className="grid h-[64px] w-[64px] place-items-center rounded-[19px] bg-[var(--color-accent)] text-[var(--color-accent-ink)] shadow-[var(--shadow-lift)]">
           <FlameIcon size={31} strokeWidth={1.7} />
         </span>
-        <h1 className="mt-5 text-[2.5rem] leading-none tracking-[-0.03em]">My Cal</h1>
+        <h1 className="mt-5 text-[2.5rem] leading-none tracking-[-0.03em]">MyCal</h1>
         <p className="mt-2.5 max-w-[30ch] text-[1rem] leading-relaxed text-[var(--color-ink-2)]">
           Photograph a meal, check the estimate, keep an honest ledger of the day.
         </p>
@@ -180,7 +180,7 @@ export function SignIn() {
       </form>
 
       <p className="mx-auto mt-8 max-w-[38ch] text-center text-[0.78rem] leading-relaxed text-[var(--color-ink-3)]">
-        My Cal estimates. It is a tracking aid, not medical advice, and every number it
+        MyCal estimates. It is a tracking aid, not medical advice, and every number it
         produces stays yours to correct.
       </p>
     </div>

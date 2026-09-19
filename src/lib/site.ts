@@ -1,5 +1,5 @@
 /**
- * Where this copy of My Cal actually lives.
+ * Where this copy of MyCal actually lives.
  *
  * Every link Supabase mails out — confirm your address, reset your password —
  * comes back to a URL we hand it. Left unsaid, Supabase falls back to the

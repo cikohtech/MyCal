@@ -182,7 +182,7 @@ export function Onboarding() {
   function validate(current: Step): string | null {
     if (current === 'age') {
       if (!Number.isFinite(age) || age < 13 || age > 110) {
-        return 'Enter an age between 13 and 110. My Cal is built for adults tracking their own intake.'
+        return 'Enter an age between 13 and 110. MyCal is built for adults tracking their own intake.'
       }
     }
     if (current === 'height') {
@@ -309,7 +309,7 @@ export function Onboarding() {
             Get started
           </Button>
           <p className="mt-3 px-2 text-center text-[0.76rem] leading-relaxed text-[var(--color-ink-3)]">
-            My Cal produces estimates to help you track intake. It is not medical advice.
+            MyCal produces estimates to help you track intake. It is not medical advice.
           </p>
         </div>
       </div>

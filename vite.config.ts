@@ -13,8 +13,8 @@ export default defineConfig({
       registerType: 'prompt',
       includeAssets: ['favicon.svg', 'icons/apple-touch-icon.png'],
       manifest: {
-        name: 'My Cal',
-        short_name: 'My Cal',
+        name: 'MyCal',
+        short_name: 'MyCal',
         description: 'Photograph a meal, review the estimate, keep the day honest.',
         theme_color: '#FFFFFF',
         background_color: '#F2F2F7',

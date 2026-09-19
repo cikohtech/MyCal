@@ -1,11 +1,11 @@
-# Architecture — My Cal
+# Architecture — MyCal
 
 ## Architectural approach
 
-My Cal is an MVP PWA with a React client, Supabase as the application backend, and one separate AI analysis API behind a trusted server boundary. The browser performs ordinary authenticated CRUD directly against Supabase under Row Level Security (RLS). It never receives AI-provider credentials or unrestricted image access.
+MyCal is an MVP PWA with a React client, Supabase as the application backend, and one separate AI analysis API behind a trusted server boundary. The browser performs ordinary authenticated CRUD directly against Supabase under Row Level Security (RLS). It never receives AI-provider credentials or unrestricted image access.
 
 ```text
-My Cal — mobile web/PWA (React + TypeScript + Vite + Tailwind)
+MyCal — mobile web/PWA (React + TypeScript + Vite + Tailwind)
        │  authenticated CRUD, realtime optional
        ▼
 Supabase: Auth · PostgreSQL + RLS · Storage · Edge Functions

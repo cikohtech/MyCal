@@ -288,7 +288,7 @@ export function Profile() {
       </div>
 
       <p className="px-2 py-8 text-[0.75rem] leading-relaxed text-[var(--color-ink-3)]">
-        My Cal produces estimates to help you track intake. It is not medical advice and does
+        MyCal produces estimates to help you track intake. It is not medical advice and does
         not diagnose or treat anything. If food, weight or exercise is causing you distress,
         talk to a clinician.
       </p>

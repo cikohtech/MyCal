@@ -1,4 +1,4 @@
-# Product Requirements Document — My Cal
+# Product Requirements Document — MyCal
 
 ## Product vision
 

@@ -1,10 +1,10 @@
-# My Cal
+# MyCal
 
 A mobile-first PWA for logging meals from photos and barcodes. It shows what you
 have eaten today against a calorie and macro target derived from your own
 profile, and it keeps every AI-generated estimate visible and editable.
 
-My Cal estimates. It is a tracking aid, not medical advice, and no number it
+MyCal estimates. It is a tracking aid, not medical advice, and no number it
 produces is treated as more authoritative than the person using it.
 
 ## What it does
@@ -39,7 +39,7 @@ npm install
 npm run dev
 ```
 
-With no environment variables set, My Cal runs entirely on-device: every screen
+With no environment variables set, MyCal runs entirely on-device: every screen
 works, records live in `localStorage`, photos live in IndexedDB, and barcode
 lookup goes straight to Open Food Facts. There is no account and nothing leaves
 the browser. This is the fastest way to see the whole product.
@@ -71,7 +71,7 @@ unavailable and the rest of the app carries on.
 
 ### Deploying the client
 
-`vercel.json` carries one rewrite that the app does not work without. My Cal is a
+`vercel.json` carries one rewrite that the app does not work without. MyCal is a
 single-page app: the router owns `/today`, `/weight`, `/auth/confirm` and the
 rest, and none of them exist as files. Without the fallback to `index.html`,
 the host answers every one of them with a 404 — refreshing the page anywhere

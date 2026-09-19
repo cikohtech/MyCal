@@ -118,7 +118,7 @@ export function AuthConfirm() {
         <>
           <h1 className="mt-6 text-[1.7rem]">You’re confirmed</h1>
           <p className="mt-2 max-w-[30ch] text-[0.95rem] leading-relaxed text-[var(--color-ink-2)]">
-            Taking you into My Cal now.
+            Taking you into MyCal now.
           </p>
         </>
       )}

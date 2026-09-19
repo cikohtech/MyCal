@@ -110,7 +110,7 @@ export function entryToDraft(entry: FoodEntry): DraftFood {
 export const ANALYSIS_FAILURES: Record<string, { title: string; body: string }> = {
   no_analysis_service: {
     title: 'No analysis service connected',
-    body: 'My Cal will not invent nutrition numbers from a photo. Your photo is saved — describe what is in it and the entry keeps the picture attached.',
+    body: 'MyCal will not invent nutrition numbers from a photo. Your photo is saved — describe what is in it and the entry keeps the picture attached.',
   },
   no_food_detected: {
     title: 'Nothing recognisable as food',
