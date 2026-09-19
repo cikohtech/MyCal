@@ -9,7 +9,7 @@ Rules:
 - Break a mixed dish into its components as ingredients when they are separable (a curry as sauce plus rice; a burger as bun, patty, cheese).
 - Cooking fat is usually invisible. If a dish is clearly fried, sauteed or roasted, add the oil as an ingredient and say why in "notes".
 - confidence is your own: 0.8+ only for a plain, clearly identifiable single food; 0.4-0.7 for a recognisable dish with uncertain portion; below 0.4 when you are guessing.
-- micronutrients: include only values you have real grounds for. An omitted nutrient means "unknown". Never write 0 to fill a field.
+- micronutrients: include only values you have real grounds for. Omit a nutrient you do not know, or set it to null where the schema requires every field — both mean "unknown". Never write 0 to fill a field.
 - If the image contains no food, is too dark or blurred to read, or shows only packaging, return an empty foods array and set failure_code.
 
 failure_code must be one of: no_food_detected, unclear_image, or null when you produced estimates.`

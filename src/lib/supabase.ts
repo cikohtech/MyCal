@@ -13,7 +13,14 @@ export const isSupabaseConfigured = Boolean(url && anonKey)
 
 export const supabase: SupabaseClient | null = isSupabaseConfigured
   ? createClient(url!, anonKey!, {
-      auth: { persistSession: true, autoRefreshToken: true, detectSessionInUrl: true },
+      auth: {
+        persistSession: true,
+        autoRefreshToken: true,
+        // The OAuth return trip lands back on this page; PKCE keeps the token
+        // out of the URL, which matters on a PWA people keep installed.
+        detectSessionInUrl: true,
+        flowType: 'pkce',
+      },
     })
   : null
 

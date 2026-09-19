@@ -109,11 +109,15 @@ export class LocalStore implements DataStore {
     return () => listeners.delete(handler)
   }
 
-  async signUp(email: string): Promise<{ user: AppUser | null; needsConfirmation: boolean }> {
+  async signUp(email: string): Promise<AppUser> {
     const user: AppUser = { id: LOCAL_USER_ID, email: email || null, isLocal: true }
     write('user', user)
     notify(user)
-    return { user, needsConfirmation: false }
+    return user
+  }
+
+  async signInWithGoogle(): Promise<void> {
+    throw new Error('Google sign-in needs a Supabase project. Here your data stays on this device.')
   }
 
   async signIn(email: string): Promise<AppUser> {

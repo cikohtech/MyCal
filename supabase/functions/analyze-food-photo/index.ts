@@ -5,18 +5,19 @@
  * an AI provider.
  *
  * It verifies the caller, verifies they own the image, reads the bytes itself
- * (so no third party ever receives a URL into our storage), asks Claude for a
- * structured estimate, records the analysis, and returns a draft. It never
+ * (so no third party ever receives a URL into our storage), asks the configured
+ * AI provider for a structured estimate, records the analysis, and returns a draft. It never
  * writes a food entry: only the person reviewing the draft can do that.
  */
-import Anthropic from 'npm:@anthropic-ai/sdk@0.71.0'
+import { resolveVisionClient } from '../_shared/ai.ts'
 import { authenticate, corsHeaders, json, logFailure, withinRateLimit } from '../_shared/http.ts'
 import { OUTPUT_SCHEMA, SYSTEM_PROMPT } from './prompt.ts'
 
-const MODEL = Deno.env.get('ANTHROPIC_MODEL') ?? 'claude-opus-5'
 const BUCKET = 'food-images'
 const SIGNED_URL_TTL_SECONDS = 120
-const ANALYSIS_TIMEOUT_MS = 45_000
+// A full plate broken into components measured 13-36s against gpt-5.5, so the
+// ceiling is set well above that: it is there to end a hung call, not a slow one.
+const ANALYSIS_TIMEOUT_MS = 90_000
 const RATE_LIMIT = { calls: 12, windowMs: 60_000 }
 
 interface RequestBody {
@@ -69,6 +70,8 @@ function sanitizeNutrition(input: ModelNutrition): ModelNutrition {
   }
   const micronutrients: Record<string, number> = {}
   for (const [key, value] of Object.entries(input?.micronutrients ?? {})) {
+    // A null is the model saying "unknown"; only a real reading gets recorded.
+    if (value === null || value === undefined || value === '') continue
     const number = Number(value)
     if (Number.isFinite(number) && number >= 0) micronutrients[key] = number
   }
@@ -96,8 +99,9 @@ Deno.serve(async (request) => {
     return failed('rate_limited')
   }
 
-  const apiKey = Deno.env.get('ANTHROPIC_API_KEY')
-  if (!apiKey) return failed('no_analysis_service')
+  // Whichever provider key is in the function's secrets decides this.
+  const ai = resolveVisionClient()
+  if (!ai) return failed('no_analysis_service')
 
   let body: RequestBody
   try {
@@ -136,7 +140,7 @@ Deno.serve(async (request) => {
       user_id: caller.userId,
       food_image_id: image.id,
       status: 'processing',
-      model: MODEL,
+      model: ai.model,
       idempotency_key: body.idempotency_key ?? null,
     })
     .select('id')
@@ -172,49 +176,31 @@ Deno.serve(async (request) => {
     }
     const base64 = btoa(binary)
 
-    const client = new Anthropic({ apiKey })
-    const response = await client.messages.create(
-      {
-        model: MODEL,
-        max_tokens: 16000,
-        system: SYSTEM_PROMPT,
-        output_config: {
-          effort: 'medium',
-          format: { type: 'json_schema', schema: OUTPUT_SCHEMA },
-        },
-        messages: [{
-          role: 'user',
-          content: [
-            {
-              type: 'image',
-              source: {
-                type: 'base64',
-                media_type: (image.mime_type ?? 'image/jpeg') as 'image/jpeg',
-                data: base64,
-              },
-            },
-            { type: 'text', text: 'Estimate what is on this plate.' },
-          ],
-        }],
-      },
-      { timeout: ANALYSIS_TIMEOUT_MS },
-    )
+    const response = await ai.analyze({
+      system: SYSTEM_PROMPT,
+      prompt: 'Estimate what is on this plate.',
+      imageBase64: base64,
+      mimeType: image.mime_type ?? 'image/jpeg',
+      schema: OUTPUT_SCHEMA as unknown as Record<string, unknown>,
+      schemaName: 'food_photo_estimate',
+      maxOutputTokens: 16000,
+      timeoutMs: ANALYSIS_TIMEOUT_MS,
+    })
 
-    if (response.stop_reason === 'refusal') {
+    if (response.refused) {
       return await finish(
-        { status: 'failed', model: MODEL, notes: null, foods: [], failure_code: 'no_food_detected' },
+        { status: 'failed', model: ai.model, notes: null, foods: [], failure_code: 'no_food_detected' },
         'failed', 'no_food_detected',
       )
     }
 
-    const textBlock = response.content.find((block) => block.type === 'text')
-    if (!textBlock || textBlock.type !== 'text') throw new Error('empty model response')
-    const parsed = JSON.parse(textBlock.text) as ModelResult
+    if (!response.text) throw new Error('empty model response')
+    const parsed = JSON.parse(response.text) as ModelResult
 
     if (parsed.failure_code || !parsed.foods?.length) {
       const code = parsed.failure_code ?? 'no_food_detected'
       return await finish(
-        { status: 'failed', model: MODEL, notes: parsed.notes ?? null, foods: [], failure_code: code },
+        { status: 'failed', model: ai.model, notes: parsed.notes ?? null, foods: [], failure_code: code },
         'failed', code,
       )
     }
@@ -245,7 +231,7 @@ Deno.serve(async (request) => {
     return await finish(
       {
         status: lowConfidence ? 'needs_review' : 'ready',
-        model: MODEL,
+        model: ai.model,
         notes: parsed.notes ?? null,
         foods,
         failure_code: null,
@@ -257,7 +243,7 @@ Deno.serve(async (request) => {
     const timedOut = error instanceof Error && /timeout|abort/i.test(error.message)
     const code = timedOut ? 'timeout' : 'service_unavailable'
     return await finish(
-      { status: 'failed', model: MODEL, notes: null, foods: [], failure_code: code },
+      { status: 'failed', model: ai.model, notes: null, foods: [], failure_code: code },
       'failed', code,
     )
   }

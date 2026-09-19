@@ -33,8 +33,11 @@ export interface DataStore {
 
   getUser(): Promise<AppUser | null>
   onAuthChange(handler: (user: AppUser | null) => void): () => void
-  signUp(email: string, password: string): Promise<{ user: AppUser | null; needsConfirmation: boolean }>
+  /** Creates the account and returns it already signed in — no inbox detour. */
+  signUp(email: string, password: string): Promise<AppUser>
   signIn(email: string, password: string): Promise<AppUser>
+  /** Hands the browser off to Google; the session arrives on the way back. */
+  signInWithGoogle(): Promise<void>
   signOut(): Promise<void>
 
   getProfile(userId: Uuid): Promise<Profile | null>

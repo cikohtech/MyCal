@@ -1,7 +1,8 @@
 {
   "imports": {
     "@supabase/supabase-js": "npm:@supabase/supabase-js@2",
-    "@anthropic-ai/sdk": "npm:@anthropic-ai/sdk@0.71.0"
+    "@anthropic-ai/sdk": "npm:@anthropic-ai/sdk@0.71.0",
+    "openai": "npm:openai@7.19.0"
   },
   "compilerOptions": {
     "lib": ["deno.window", "dom"],

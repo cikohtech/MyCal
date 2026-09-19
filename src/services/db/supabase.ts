@@ -46,10 +46,38 @@ export class SupabaseStore implements DataStore {
     return () => data.subscription.unsubscribe()
   }
 
-  async signUp(email: string, password: string) {
+  async signUp(email: string, password: string): Promise<AppUser> {
     const { data, error } = await requireSupabase().auth.signUp({ email, password })
     if (error) throw new Error(error.message)
-    return { user: toUser(data.user), needsConfirmation: !data.session }
+
+    // With confirmations off — how this project is configured — sign-up hands
+    // back a session and the person is simply in. A project that still has
+    // them on returns none, so try the password once before giving up: that
+    // covers an account that already exists, and says something useful if the
+    // inbox really is the only way through.
+    if (!data.session) {
+      try {
+        return await this.signIn(email, password)
+      } catch {
+        throw new Error(`Confirm ${email} from your inbox, then sign in.`)
+      }
+    }
+
+    const user = toUser(data.user)
+    if (!user) throw new Error('Sign-up did not return an account.')
+    return user
+  }
+
+  async signInWithGoogle(): Promise<void> {
+    const { error } = await requireSupabase().auth.signInWithOAuth({
+      provider: 'google',
+      options: {
+        // Back to the front door; the router sends people on from there.
+        redirectTo: `${window.location.origin}/`,
+        queryParams: { prompt: 'select_account' },
+      },
+    })
+    if (error) throw new Error(error.message)
   }
 
   async signIn(email: string, password: string): Promise<AppUser> {

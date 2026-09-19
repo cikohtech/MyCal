@@ -24,7 +24,20 @@ enable_signup = true
 
 [auth.email]
 enable_signup = true
+# No inbox detour: creating an account signs you straight in. The hosted
+# project needs the same — Authentication → Providers → Email → "Confirm
+# email" off — or sign-up hands back no session.
 enable_confirmations = false
+
+# Local Google sign-in reads these from the shell; on the hosted project the
+# same pair goes in Authentication → Providers → Google, and Google's own
+# OAuth client needs https://<project>.supabase.co/auth/v1/callback as an
+# authorized redirect URI.
+[auth.external.google]
+enabled = true
+client_id = "env(SUPABASE_AUTH_GOOGLE_CLIENT_ID)"
+secret = "env(SUPABASE_AUTH_GOOGLE_SECRET)"
+skip_nonce_check = false
 
 # Both functions verify the caller's JWT themselves before touching anything.
 [functions.analyze-food-photo]

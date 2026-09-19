@@ -56,8 +56,27 @@ the browser. This is the fastest way to see the whole product.
 cp .env.example .env.local     # fill in your project URL and anon key
 supabase db push               # applies supabase/migrations/0001_init.sql
 supabase functions deploy analyze-food-photo lookup-barcode
-supabase secrets set ANTHROPIC_API_KEY=sk-ant-...
+supabase secrets set OPENAI_API_KEY=sk-...        # or ANTHROPIC_API_KEY=sk-ant-...
 ```
+
+Photo analysis works against either provider. The key you set is the one it
+uses: `OPENAI_API_KEY` runs it on OpenAI, `ANTHROPIC_API_KEY` on Claude, and
+with both present `AI_PROVIDER=openai|anthropic` settles it (Anthropic
+otherwise). `OPENAI_MODEL` and `ANTHROPIC_MODEL` override the defaults of
+`gpt-5.5` and `claude-opus-5`; both must be able to read an image and return
+structured JSON. With no key set, the photo screen reports that analysis is
+unavailable and the rest of the app carries on.
+
+Two settings in the Supabase dashboard finish the front door. Under
+Authentication → Providers, turn **Confirm email** off on the Email provider —
+creating an account then returns a session and the person lands on setup
+instead of in their inbox — and fill in **Google** with the client ID and
+secret from a Google Cloud OAuth client whose authorized redirect URI is
+`https://<project>.supabase.co/auth/v1/callback`. Add your deployed origin to
+Authentication → URL Configuration so the return trip is allowed. Locally,
+`supabase/config.toml` already carries both, and Google reads
+`SUPABASE_AUTH_GOOGLE_CLIENT_ID` and `SUPABASE_AUTH_GOOGLE_SECRET` from your
+shell.
 
 Once `VITE_SUPABASE_URL` and `VITE_SUPABASE_ANON_KEY` are present the app
 switches to the Supabase store automatically — same interface, same screens.
@@ -65,8 +84,8 @@ The anon key is meant to ship in the bundle; row level security in the migration
 is what actually protects the data, so treat that file as the security boundary
 and test it with two real users rather than a service-role client.
 
-The AI key never appears in the client. Photo analysis runs in
-`analyze-food-photo`, which verifies the caller's JWT, verifies they own the
+The AI key never appears in the client, whichever provider it belongs to.
+Photo analysis runs in `analyze-food-photo`, which verifies the caller's JWT, verifies they own the
 image, downloads the bytes itself rather than handing a storage URL to a third
 party, and writes an auditable `ai_analyses` row. It never creates a food entry.
 

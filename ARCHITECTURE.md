@@ -50,11 +50,12 @@ PWA work should start with a valid web manifest, icons, and a conservative servi
 
 ## Supabase architecture
 
-- **Auth:** Supabase Auth provides session management and the `auth.uid()` principal. MVP can use one email-based sign-in method; identity provider expansion is independent of application data.
+- **Auth:** Supabase Auth provides session management and the `auth.uid()` principal. Two entry points share it: email and password, with confirmations off so sign-up returns a session and signs the person straight in, and Google OAuth over PKCE, which returns to the app's front door and is picked up by the same `onAuthStateChange` listener. Both produce the same principal, so nothing downstream distinguishes them; further identity providers are independent of application data.
 - **PostgreSQL:** source of truth for profiles, targets, food entries, analysis metadata, reference foods, and weight data.
 - **RLS:** enabled on every user-owned table. Browser access is restricted to records where `user_id = auth.uid()`.
 - **Storage:** a private `food-images` bucket. Object keys begin with the owner UUID and policies validate that prefix.
 - **Edge Functions:** verify the user JWT, enforce ownership, create short-lived signed image URLs, call the external AI API, and perform trusted product-provider lookups/caching.
+- **AI provider:** chosen by which key is in the function secrets, behind one adapter in `supabase/functions/_shared/ai.ts` (`OPENAI_API_KEY` or `ANTHROPIC_API_KEY`, with `AI_PROVIDER` breaking a tie). The adapter takes an image and a JSON Schema and returns the model's JSON, so the analysis function, the prompt and the stored result are the same either way; only the recorded `model` differs.
 
 Service-role keys live only in server-side secrets. The client uses the anon key plus its authenticated session, which is safe only because RLS and Storage policies are enforced.
 

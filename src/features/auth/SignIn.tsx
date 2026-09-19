@@ -5,8 +5,9 @@ import { TextField } from '@/components/Field'
 import { SegmentedControl } from '@/components/SegmentedControl'
 import { DayMeter } from '@/components/DayMeter'
 import { Callout } from '@/components/Callout'
-import { FlameIcon } from '@/components/Icons'
+import { FlameIcon, GoogleMark } from '@/components/Icons'
 import { store } from '@/services/db'
+import { cn } from '@/lib/cn'
 import { kcal } from '@/lib/format'
 
 type Mode = 'sign-in' | 'sign-up'
@@ -26,36 +27,41 @@ export function SignIn() {
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
   const [error, setError] = useState<string | null>(null)
-  const [notice, setNotice] = useState<string | null>(null)
-  const [busy, setBusy] = useState(false)
+  /** Which button is working, so only that one shows a spinner. */
+  const [pending, setPending] = useState<'form' | 'google' | null>(null)
 
   async function handleSubmit(event: FormEvent) {
     event.preventDefault()
     setError(null)
-    setNotice(null)
 
     if (!local) {
       if (!email.includes('@')) return setError('Enter the email address for your account.')
       if (password.length < 8) return setError('Passwords need at least 8 characters.')
     }
 
-    setBusy(true)
+    setPending('form')
     try {
-      if (mode === 'sign-up') {
-        const { needsConfirmation } = await store.signUp(email, password)
-        if (needsConfirmation) {
-          setNotice(`Check ${email} for a confirmation link, then sign in.`)
-          setMode('sign-in')
-          return
-        }
-      } else {
-        await store.signIn(email, password)
-      }
+      // Creating an account signs you straight in — there is no inbox step.
+      if (mode === 'sign-up') await store.signUp(email, password)
+      else await store.signIn(email, password)
       navigate('/today', { replace: true })
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : 'That did not work. Try again.')
     } finally {
-      setBusy(false)
+      setPending(null)
+    }
+  }
+
+  async function handleGoogle() {
+    setError(null)
+    setPending('google')
+    try {
+      // This navigates away to Google and comes back to the front door, so
+      // there is nothing to do afterwards — the router takes it from there.
+      await store.signInWithGoogle()
+    } catch (caught) {
+      setError(caught instanceof Error ? caught.message : 'Google sign-in did not work. Try again.')
+      setPending(null)
     }
   }
 
@@ -87,9 +93,29 @@ export function SignIn() {
         <DayMeter segments={SAMPLE} consumed={1210} target={2210} />
       </div>
 
+      {!local && (
+        <div className="rise mt-7 flex flex-col gap-4" style={{ animationDelay: '150ms' }}>
+          <Button
+            variant="secondary" size="lg" full
+            onClick={handleGoogle}
+            loading={pending === 'google'}
+            disabled={pending === 'form'}
+            icon={<GoogleMark />}
+          >
+            Continue with Google
+          </Button>
+          <div className="flex items-center gap-3 text-[0.78rem] uppercase tracking-[0.06em] text-[var(--color-ink-3)]">
+            <span className="h-px flex-1 bg-[var(--color-line)]" />
+            or
+            <span className="h-px flex-1 bg-[var(--color-line)]" />
+          </div>
+        </div>
+      )}
+
       <form
-        onSubmit={handleSubmit} className="rise mt-7 flex flex-col gap-4"
-        style={{ animationDelay: '160ms' }}
+        onSubmit={handleSubmit}
+        className={cn('rise flex flex-col gap-4', local ? 'mt-7' : 'mt-4')}
+        style={{ animationDelay: '190ms' }}
       >
         {local ? (
           <Callout tone="note" title="No account needed here">
@@ -124,9 +150,12 @@ export function SignIn() {
         )}
 
         {error && <Callout tone="problem">{error}</Callout>}
-        {notice && <Callout tone="note">{notice}</Callout>}
 
-        <Button type="submit" variant="primary" size="lg" full loading={busy}>
+        <Button
+          type="submit" variant="primary" size="lg" full
+          loading={pending === 'form'}
+          disabled={pending === 'google'}
+        >
           {local ? 'Start tracking' : mode === 'sign-up' ? 'Create account' : 'Sign in'}
         </Button>
       </form>
