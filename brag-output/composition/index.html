@@ -1,0 +1,671 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=1920, height=1080">
+  <title>MyCal — Brag</title>
+  <script src="https://cdn.jsdelivr.net/npm/gsap@3.14.2/dist/gsap.min.js"></script>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body { margin: 0; background: #f2f2f7; }
+
+    #root {
+      position: relative;
+      width: 100%;
+      height: 100%;
+      overflow: hidden;
+      font-family: system-ui, sans-serif;
+      -webkit-font-smoothing: antialiased;
+    }
+
+    /* Clip base — full-frame, stacked. Inner .si divs handle cross-fades. */
+    .clip {
+      position: absolute;
+      inset: 0;
+    }
+
+    /* Inner scene container — this is what GSAP fades (not the .clip) */
+    .si {
+      position: absolute;
+      inset: 0;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      background: #f2f2f7;
+    }
+
+    /* ──────────────────────────────────────────────────────
+       SCENE 1 — HOOK
+    ────────────────────────────────────────────────────── */
+    #hook-text {
+      font-size: 80px;
+      font-weight: 700;
+      color: #1c1c1e;
+      letter-spacing: -0.03em;
+      line-height: 1.1;
+      text-align: center;
+    }
+
+    /* ──────────────────────────────────────────────────────
+       SCENE 2 — FLOW (phone mockup)
+    ────────────────────────────────────────────────────── */
+    #phone {
+      width: 340px;
+      height: 680px;
+      background: #ffffff;
+      border-radius: 44px;
+      box-shadow:
+        0 28px 80px -12px rgba(0,0,0,0.30),
+        0 4px 16px rgba(0,0,0,0.10);
+      overflow: hidden;
+      position: relative;
+      flex-shrink: 0;
+    }
+
+    /* Camera screen */
+    #cam-screen {
+      position: absolute;
+      inset: 0;
+      background: #1a1008;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: flex-end;
+      padding-bottom: 52px;
+      overflow: hidden;
+    }
+    #cam-food {
+      position: absolute;
+      inset: 0;
+      background:
+        radial-gradient(ellipse 110px 80px at 28% 38%, rgba(215,110,35,0.88) 0%, transparent 65%),
+        radial-gradient(ellipse 75px 60px at 62% 32%, rgba(185,55,18,0.82) 0%, transparent 60%),
+        radial-gradient(ellipse 55px 45px at 50% 58%, rgba(85,145,38,0.72) 0%, transparent 55%),
+        radial-gradient(ellipse 90px 65px at 72% 55%, rgba(205,145,55,0.78) 0%, transparent 60%),
+        linear-gradient(155deg, #1a0c06 0%, #3e2510 40%, #6b3112 65%, #3d5418 100%);
+    }
+    #cam-viewfinder {
+      position: absolute;
+      top: 28%;
+      left: 50%;
+      width: 180px;
+      height: 180px;
+      border: 1.5px solid rgba(255,255,255,0.65);
+      border-radius: 3px;
+      transform: translateX(-50%);
+    }
+    #shutter-ring {
+      width: 68px;
+      height: 68px;
+      border-radius: 50%;
+      border: 3px solid rgba(255,255,255,0.55);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      flex-shrink: 0;
+      position: relative;
+    }
+    #shutter-inner {
+      width: 54px;
+      height: 54px;
+      border-radius: 50%;
+      background: rgba(255,255,255,0.92);
+    }
+    #tap-dot {
+      position: absolute;
+      bottom: 52px;
+      left: 50%;
+      width: 32px;
+      height: 32px;
+      border-radius: 50%;
+      background: rgba(255,255,255,0.55);
+      border: 1.5px solid rgba(255,255,255,0.90);
+      margin-left: -16px;
+    }
+
+    /* Day screen (appears after shutter) */
+    #day-screen {
+      position: absolute;
+      inset: 0;
+      background: #f2f2f7;
+    }
+    #day-top {
+      height: 44px;
+      display: flex;
+      align-items: flex-end;
+      justify-content: center;
+      padding-bottom: 8px;
+    }
+    #day-top-title {
+      font-size: 16px;
+      font-weight: 600;
+      color: #1c1c1e;
+    }
+    #day-body {
+      padding: 10px 14px;
+    }
+
+    /* Analyzing card */
+    #analyzing-card {
+      background: #ffffff;
+      border-radius: 14px;
+      padding: 12px 14px;
+      position: relative;
+      overflow: hidden;
+    }
+    #analyzing-name {
+      font-size: 13px;
+      font-weight: 600;
+      color: #1c1c1e;
+      margin-bottom: 2px;
+    }
+    #analyzing-sub {
+      font-size: 12px;
+      color: #6e6e73;
+    }
+    #analyzing-sweep {
+      position: absolute;
+      inset: 0;
+      width: 28%;
+      background: linear-gradient(90deg, transparent, rgba(10,108,240,0.16), transparent);
+    }
+
+    /* Draft card — bottom sheet */
+    #draft-sheet {
+      position: absolute;
+      bottom: 0;
+      left: 0;
+      right: 0;
+      background: #ffffff;
+      border-radius: 18px 18px 0 0;
+      padding: 14px 16px 24px;
+    }
+    #sheet-handle {
+      width: 34px;
+      height: 4px;
+      background: #e7e7ec;
+      border-radius: 2px;
+      margin: 0 auto 12px;
+    }
+    #draft-name {
+      font-size: 15px;
+      font-weight: 700;
+      color: #1c1c1e;
+      margin-bottom: 2px;
+    }
+    #draft-kcal {
+      font-size: 26px;
+      font-weight: 700;
+      color: #1c1c1e;
+      letter-spacing: -0.02em;
+      margin-bottom: 12px;
+    }
+    #draft-kcal-unit {
+      font-size: 14px;
+      font-weight: 400;
+      color: #6b6b70;
+      margin-left: 4px;
+    }
+    #draft-macros {
+      display: flex;
+      gap: 6px;
+      margin-bottom: 14px;
+    }
+    .mc {
+      flex: 1;
+      background: #f2f2f7;
+      border-radius: 10px;
+      padding: 7px 8px;
+      text-align: center;
+    }
+    .mc-label {
+      font-size: 10px;
+      color: #6e6e73;
+      font-weight: 600;
+      letter-spacing: 0.04em;
+      text-transform: uppercase;
+      margin-bottom: 2px;
+    }
+    .mc-val {
+      font-size: 14px;
+      font-weight: 700;
+      color: #1c1c1e;
+    }
+    .mc-val.active {
+      border-bottom: 1.5px solid #0a6cf0;
+    }
+    #save-btn {
+      width: 100%;
+      height: 44px;
+      background: #17181c;
+      color: #ffffff;
+      border: none;
+      border-radius: 12px;
+      font-size: 14px;
+      font-weight: 600;
+      cursor: default;
+    }
+
+    /* ──────────────────────────────────────────────────────
+       SCENE 3 — THE DAY (dashboard)
+    ────────────────────────────────────────────────────── */
+    #dashboard {
+      width: 400px;
+    }
+
+    #ring-card {
+      background: #ffffff;
+      border-radius: 20px;
+      padding: 28px 24px 24px;
+      box-shadow: 0 1px 3px rgba(0,0,0,0.06);
+      margin-bottom: 10px;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+    }
+    #ring-wrap {
+      position: relative;
+      width: 188px;
+      height: 188px;
+    }
+    #ring-svg {
+      width: 188px;
+      height: 188px;
+      /* rotate so 0° is at the top */
+      transform: rotate(-90deg);
+    }
+    #ring-center {
+      position: absolute;
+      inset: 0;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+    }
+    #ring-num {
+      font-size: 28px;
+      font-weight: 700;
+      color: #1c1c1e;
+      letter-spacing: -0.02em;
+      line-height: 1;
+    }
+    #ring-lbl {
+      font-size: 12px;
+      color: #6e6e73;
+      margin-top: 4px;
+    }
+    #ring-target-lbl {
+      font-size: 13px;
+      color: #6e6e73;
+      margin-top: 10px;
+    }
+    /* Soft glow ring (animated by GSAP, finite repeat) */
+    #ring-glow {
+      position: absolute;
+      inset: -6px;
+      border-radius: 50%;
+      box-shadow: 0 0 20px 6px rgba(10,108,240,0.18);
+      opacity: 0.15;
+    }
+
+    /* Macro card */
+    #macro-card {
+      background: #ffffff;
+      border-radius: 20px;
+      padding: 18px 20px;
+      box-shadow: 0 1px 3px rgba(0,0,0,0.06);
+    }
+    .mrow {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      margin-bottom: 12px;
+    }
+    .mrow:last-child { margin-bottom: 0; }
+    .mrow-lbl {
+      font-size: 13px;
+      font-weight: 500;
+      color: #1c1c1e;
+      width: 50px;
+      flex-shrink: 0;
+    }
+    .mrow-track {
+      flex: 1;
+      height: 7px;
+      background: #f0f0f4;
+      border-radius: 4px;
+      overflow: hidden;
+    }
+    .mrow-fill {
+      height: 100%;
+      border-radius: 4px;
+      width: 0%;
+    }
+    #fill-protein { background: #12a065; }
+    #fill-carbs   { background: #db8500; }
+    #fill-fat     { background: #8a57e0; }
+    .mrow-val {
+      font-size: 12px;
+      color: #6e6e73;
+      width: 64px;
+      text-align: right;
+      flex-shrink: 0;
+    }
+
+    /* ──────────────────────────────────────────────────────
+       SCENE 4 — OUTRO
+    ────────────────────────────────────────────────────── */
+    #outro-inner {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+    }
+    #punchline {
+      font-size: 22px;
+      color: #6e6e73;
+      text-align: center;
+      max-width: 520px;
+      line-height: 1.5;
+      font-weight: 400;
+    }
+    #wordmark {
+      font-size: 52px;
+      font-weight: 700;
+      color: #1c1c1e;
+      letter-spacing: -0.03em;
+      margin-top: 28px;
+    }
+  </style>
+</head>
+<body>
+  <div data-hf-id="hf-fsk8" id="root" data-composition-id="mycal-brag" data-start="0" data-width="1920" data-height="1080" data-duration="20">
+
+    <!-- ── Audio ─────────────────────────────────────────── -->
+    <!-- Music: media-start=3.0 so first beat (3.02s in track) = video t=0.
+         At video t=14, music t=17 → hits 17.02s strong cue (ring reveal).
+         At video t=17, music t=20 → hits 20.02s strong cue (punchline). -->
+    <audio data-hf-id="hf-o4vo" id="bg-music" data-start="0" data-duration="20" data-track-index="10" data-volume="0.28" data-media-start="3.0" src="assets/music/happy-beats-business-moves-vol-1-by-ende-dot-app.mp3">
+    </audio>
+
+    <!-- Shutter click — fires at camera tap (video t=5.0) -->
+    <audio data-hf-id="hf-zxch" id="sfx-click" data-start="5.0" data-duration="0.10" data-track-index="11" data-volume="0.65" src="assets/sfx/interface/click_001.ogg">
+    </audio>
+
+    <!-- Bell — ring arc completes (video t=14.0 → music t=17.02, beat-locked) -->
+    <audio data-hf-id="hf-lgnc" id="sfx-bell" data-start="14.0" data-duration="1.48" data-track-index="12" data-volume="0.72" src="assets/sfx/impact/impactBell_heavy_000.ogg">
+    </audio>
+
+    <!-- Soft drop — punchline text appears (video t=17.2 → music t=20.2 ≈ 20.02s cue) -->
+    <audio data-hf-id="hf-sf6f" id="sfx-drop" data-start="17.2" data-duration="0.11" data-track-index="13" data-volume="0.45" src="assets/sfx/interface/drop_001.ogg">
+    </audio>
+
+    <!-- ── Scene 1: Hook (0–3.5s) ─────────────────────────── -->
+    <section data-hf-id="hf-6g15" id="s1" class="clip" data-start="0" data-duration="3.5" data-track-index="1">
+      <div data-hf-id="hf-pprr" id="s1i" class="si">
+        <h1 data-hf-id="hf-phre" id="hook-text">Photograph a meal.</h1>
+      </div>
+    </section>
+
+    <!-- ── Scene 2: Flow (3.0–13.0s) ────────────────────────
+         Overlap with Scene 1 by 0.5s for crossfade           -->
+    <section data-hf-id="hf-movf" id="s2" class="clip" data-start="3.0" data-duration="10.0" data-track-index="2">
+      <div data-hf-id="hf-ctoq" id="s2i" class="si">
+        <div data-hf-id="hf-5iuv" id="phone">
+
+          <!-- Camera screen -->
+          <div data-hf-id="hf-otbb" id="cam-screen">
+            <div data-hf-id="hf-y1vj" id="cam-food"></div>
+            <div data-hf-id="hf-6dec" id="cam-viewfinder"></div>
+            <div data-hf-id="hf-35nv" id="shutter-ring">
+              <div data-hf-id="hf-v1b7" id="shutter-inner"></div>
+            </div>
+            <div data-hf-id="hf-qa32" id="tap-dot"></div>
+          </div>
+
+          <!-- Day screen (revealed after shutter) -->
+          <div data-hf-id="hf-cbz6" id="day-screen">
+            <div data-hf-id="hf-wmaf" id="day-top"><span data-hf-id="hf-ra54" id="day-top-title">Today</span></div>
+            <div data-hf-id="hf-9zde" id="day-body">
+              <!-- Analyzing card -->
+              <div data-hf-id="hf-7pb1" id="analyzing-card">
+                <div data-hf-id="hf-5mwd" id="analyzing-name">Analyzing photo…</div>
+                <div data-hf-id="hf-kma3" id="analyzing-sub">Chicken tikka masala</div>
+                <div data-hf-id="hf-uqae" id="analyzing-sweep" data-layout-allow-overflow=""></div>
+              </div>
+            </div>
+          </div>
+
+          <!-- Draft food bottom sheet -->
+          <div data-hf-id="hf-6cow" id="draft-sheet">
+            <div data-hf-id="hf-oejd" id="sheet-handle"></div>
+            <div data-hf-id="hf-7gca" id="draft-name">Chicken tikka masala</div>
+            <div data-hf-id="hf-28wy" id="draft-kcal">480<span data-hf-id="hf-oi77" id="draft-kcal-unit">kcal</span></div>
+            <div data-hf-id="hf-ddiw" id="draft-macros">
+              <div data-hf-id="hf-mlk4" class="mc">
+                <div data-hf-id="hf-8s18" class="mc-label">Protein</div>
+                <div data-hf-id="hf-732a" class="mc-val active">32g</div>
+              </div>
+              <div data-hf-id="hf-w09o" class="mc">
+                <div data-hf-id="hf-69qy" class="mc-label">Carbs</div>
+                <div data-hf-id="hf-9n1u" class="mc-val">52g</div>
+              </div>
+              <div data-hf-id="hf-utcl" class="mc">
+                <div data-hf-id="hf-7mog" class="mc-label">Fat</div>
+                <div data-hf-id="hf-3zs6" class="mc-val">12g</div>
+              </div>
+            </div>
+            <button data-hf-id="hf-j47f" id="save-btn">Save</button>
+          </div>
+
+        </div><!-- /phone -->
+      </div>
+    </section>
+
+    <!-- ── Scene 3: The Day (12.5–18.0s) ─────────────────── -->
+    <section data-hf-id="hf-nyx1" id="s3" class="clip" data-start="12.5" data-duration="5.5" data-track-index="3">
+      <div data-hf-id="hf-1odl" id="s3i" class="si">
+        <div data-hf-id="hf-4fbn" id="dashboard">
+
+          <div data-hf-id="hf-7o8e" id="ring-card">
+            <div data-hf-id="hf-o8io" id="ring-wrap">
+              <div data-hf-id="hf-doj3" id="ring-glow"></div>
+              <svg data-hf-id="hf-nay9" id="ring-svg" viewBox="0 0 188 188" aria-hidden="true">
+                <!-- Track -->
+                <circle data-hf-id="hf-qwni" cx="94" cy="94" r="76" fill="none" stroke="#eaeaf0" stroke-width="14" />
+                <!-- Breakfast segment: 860 kcal / 2000 = 43%, length = 43% of circ(r=76) = 0.43 * 477.5 = 205 -->
+                <circle data-hf-id="hf-iq7l" id="seg-breakfast" cx="94" cy="94" r="76" fill="none" stroke="#9cc8ff" stroke-width="14" stroke-linecap="round" stroke-dasharray="205 478" stroke-dashoffset="478" />
+                <!-- Lunch segment: 480 kcal = 24%, starts at 205, length = 0.24 * 477.5 ≈ 115 -->
+                <circle data-hf-id="hf-mv79" id="seg-lunch" cx="94" cy="94" r="76" fill="none" stroke="#57a0f7" stroke-width="14" stroke-linecap="round" stroke-dasharray="115 478" stroke-dashoffset="272" />
+              </svg>
+              <div data-hf-id="hf-0d87" id="ring-center">
+                <div data-hf-id="hf-q1ki" id="ring-num">1,340</div>
+                <div data-hf-id="hf-j0bh" id="ring-lbl">kcal</div>
+              </div>
+            </div>
+            <div data-hf-id="hf-0nf8" id="ring-target-lbl">of 2,000 kcal</div>
+          </div>
+
+          <div data-hf-id="hf-liiy" id="macro-card">
+            <div data-hf-id="hf-qv6n" class="mrow">
+              <span data-hf-id="hf-5anm" class="mrow-lbl">Protein</span>
+              <div data-hf-id="hf-tk9p" class="mrow-track"><div data-hf-id="hf-ewks" id="fill-protein" class="mrow-fill"></div></div>
+              <span data-hf-id="hf-s471" class="mrow-val">64g / 150g</span>
+            </div>
+            <div data-hf-id="hf-maqn" class="mrow">
+              <span data-hf-id="hf-x5n0" class="mrow-lbl">Carbs</span>
+              <div data-hf-id="hf-oqgh" class="mrow-track"><div data-hf-id="hf-2ewe" id="fill-carbs" class="mrow-fill"></div></div>
+              <span data-hf-id="hf-2an8" class="mrow-val">104g / 200g</span>
+            </div>
+            <div data-hf-id="hf-lwfm" class="mrow">
+              <span data-hf-id="hf-clqu" class="mrow-lbl">Fat</span>
+              <div data-hf-id="hf-pxdk" class="mrow-track"><div data-hf-id="hf-qibk" id="fill-fat" class="mrow-fill"></div></div>
+              <span data-hf-id="hf-xnze" class="mrow-val">26g / 65g</span>
+            </div>
+          </div>
+
+        </div><!-- /dashboard -->
+      </div>
+    </section>
+
+    <!-- ── Scene 4: Outro (17.5–20.0s) ──────────────────── -->
+    <section data-hf-id="hf-m5tj" id="s4" class="clip" data-start="17.5" data-duration="2.5" data-track-index="4">
+      <div data-hf-id="hf-55jo" id="s4i" class="si">
+        <div data-hf-id="hf-8011" id="outro-inner">
+          <p data-hf-id="hf-wuo9" id="punchline">Going over is information, not a failure state.</p>
+          <div data-hf-id="hf-ubig" id="wordmark">MyCal</div>
+        </div>
+      </div>
+    </section>
+
+  </div><!-- /root -->
+
+  <script>
+    // Circumference for r=76: 2π×76 ≈ 477.52
+    const CIRC = 2 * Math.PI * 76; // 477.52 — computed at load time, deterministic
+
+    const tl = gsap.timeline({ paused: true });
+
+    // ── INITIAL STATES (set before any clip plays) ───────────────────────────
+    gsap.set("#s2i", { opacity: 0 });
+    gsap.set("#s3i", { opacity: 0 });
+    gsap.set("#s4i", { opacity: 0 });
+
+    // Phone flow — hidden states
+    gsap.set("#phone",        { x: 28, opacity: 0 });
+    gsap.set("#day-screen",   { opacity: 0 });
+    gsap.set("#draft-sheet",      { y: "100%" });
+    gsap.set("#tap-dot",          { opacity: 0 });
+    gsap.set("#analyzing-sweep",  { x: "-100%" });
+    gsap.set("#save-btn",         { opacity: 0 });
+
+    // Ring segments start empty (dashoffset = full circle = hidden)
+    // Breakfast: dasharray="205 478", starts at position 0 → dashoffset starts at 478 (full gap = hidden)
+    // Lunch: dasharray="115 478", starts at position 205 → dashoffset = 478-205 = 273 when hidden
+    // We'll animate both from hidden to their target positions in Scene 3
+    gsap.set("#seg-breakfast", { strokeDashoffset: CIRC });
+    gsap.set("#seg-lunch",     { strokeDashoffset: CIRC });
+
+    // Macro bars start empty
+    gsap.set("#fill-protein", { width: "0%" });
+    gsap.set("#fill-carbs",   { width: "0%" });
+    gsap.set("#fill-fat",     { width: "0%" });
+
+    // Dashboard, ring glow, outro elements
+    gsap.set("#dashboard",    { opacity: 0, y: 14 });
+    gsap.set("#ring-glow",    { opacity: 0.15 });
+    gsap.set("#punchline",    { opacity: 0, y: 8 });
+    gsap.set("#wordmark",     { opacity: 0 });
+
+    // ── SCENE 1: HOOK (t=0–3.5s) ────────────────────────────────────────────
+    // "Photograph a meal." slides up from slightly below
+    tl.fromTo("#hook-text",
+      { y: 18, opacity: 0 },
+      { y: 0, opacity: 1, duration: 0.55, ease: "power3.out" },
+    0.25);
+
+    // Hook fades out at end of scene (t=2.7)
+    tl.to("#hook-text", { opacity: 0, duration: 0.35, ease: "power2.in" }, 2.7);
+
+    // ── SCENE 2 CROSS-FADE IN (t=3.0) ───────────────────────────────────────
+    tl.to("#s2i", { opacity: 1, duration: 0.5, ease: "power2.out" }, 3.0);
+
+    // Phone slides in
+    tl.to("#phone", { x: 0, opacity: 1, duration: 0.55, ease: "power3.out" }, 3.3);
+
+    // ── SCENE 2: FLOW (3.0–13.0s) ────────────────────────────────────────────
+
+    // Tap dot appears over shutter at t=4.7
+    tl.to("#tap-dot", { opacity: 1, duration: 0.15 }, 4.7);
+
+    // Tap — scale down then up → shutter click SFX fires at t=5.0 (audio element)
+    tl.to("#tap-dot", { scale: 0.65, duration: 0.10, ease: "power2.in" }, 5.0);
+    tl.to("#tap-dot", { scale: 1, opacity: 0, duration: 0.20, ease: "power2.out" }, 5.10);
+
+    // After shutter: cross-dissolve from camera to day screen
+    tl.to("#cam-screen", { opacity: 0, duration: 0.35, ease: "power2.inOut" }, 5.25);
+    tl.to("#day-screen", { opacity: 1, duration: 0.35, ease: "power2.inOut" }, 5.25);
+
+    // Analyzing sweep — 2 finite passes (immediateRender:false avoids stale resting state)
+    tl.fromTo("#analyzing-sweep",
+      { x: "-100%" },
+      { x: "400%", duration: 1.2, ease: "linear", immediateRender: false },
+    5.5);
+    tl.fromTo("#analyzing-sweep",
+      { x: "-100%" },
+      { x: "400%", duration: 1.2, ease: "linear", immediateRender: false },
+    6.75);
+
+    // Draft card slides up; reveal save-btn at the same time (hidden until now for contrast compliance)
+    tl.to("#draft-sheet", { y: "0%", duration: 0.50, ease: "power3.out" }, 7.2);
+    tl.to("#save-btn", { opacity: 1, duration: 0.25 }, 7.4);
+
+    // Save button tap at t=10.2
+    tl.to("#save-btn", { scale: 0.97, duration: 0.10, ease: "power2.in" }, 10.2);
+    tl.to("#save-btn", { scale: 1, duration: 0.15, ease: "power2.out" }, 10.30);
+
+    // Draft card dismisses
+    tl.to("#draft-sheet", { y: "-110%", opacity: 0, duration: 0.45, ease: "power3.in" }, 10.45);
+
+    // Scene 2 fades out
+    tl.to("#s2i", { opacity: 0, duration: 0.55, ease: "power2.in" }, 12.2);
+
+    // ── SCENE 3 CROSS-FADE IN (t=12.5) ──────────────────────────────────────
+    tl.to("#s3i", { opacity: 1, duration: 0.6, ease: "power2.out" }, 12.5);
+    tl.to("#dashboard", { opacity: 1, y: 0, duration: 0.55, ease: "power3.out" }, 12.7);
+
+    // ── SCENE 3: THE DAY (12.5–18.0s) ────────────────────────────────────────
+
+    // Breakfast segment draws quickly (it "was already there")
+    tl.to("#seg-breakfast", {
+      strokeDashoffset: CIRC - 205,
+      duration: 0.45,
+      ease: "power3.out"
+    }, 13.0);
+
+    // ── BEAT-LOCKED: Lunch segment draws in, completes at video t=14.0 → music t=17.02s ──
+    // Lunch: dasharray="115 478", dashoffset target = CIRC - 205 - 115 = CIRC - 320
+    // To start exactly hidden and then draw: start dashoffset = CIRC, end = CIRC - 320
+    tl.fromTo("#seg-lunch",
+      { strokeDashoffset: CIRC - 205 },  // starts right where breakfast ends (hidden gap)
+      { strokeDashoffset: CIRC - 320, duration: 0.75, ease: "power3.out" },
+    13.25); // animation ends at 13.25+0.75=14.0s → beat-locked to music t=17.02s
+
+    // Ring num pops to final value simultaneously
+    tl.fromTo("#ring-num",
+      { opacity: 0.3, scale: 0.94 },
+      { opacity: 1, scale: 1, duration: 0.3, ease: "power3.out" },
+    13.8);
+
+    // Ring glow breathes — finite repeat (yoyo, 5 half-cycles = ~4.5s, covers scene)
+    tl.to("#ring-glow", { opacity: 0.50, duration: 0.9, ease: "sine.inOut", yoyo: true, repeat: 5 }, 13.5);
+
+    // Macro bars stagger — beat-grid: ~0.5s apart (≈ 120 BPM beat period)
+    // Video t=14.5, 15.0, 15.5 → music t=17.5, 18.0, 18.5 (near beats in 0.5s grid)
+    tl.to("#fill-protein", { width: "42.7%", duration: 0.5, ease: "power3.out" }, 14.5);
+    tl.to("#fill-carbs",   { width: "52.0%", duration: 0.5, ease: "power3.out" }, 15.0);
+    tl.to("#fill-fat",     { width: "40.0%", duration: 0.5, ease: "power3.out" }, 15.5);
+
+    // Dashboard holds and breathes through t=18s
+    // Scene 3 fades out at t=17.2
+    tl.to("#s3i", { opacity: 0, duration: 0.5, ease: "power2.in" }, 17.2);
+
+    // ── SCENE 4 CROSS-FADE IN (t=17.5) ──────────────────────────────────────
+    tl.to("#s4i", { opacity: 1, duration: 0.4, ease: "power2.out" }, 17.5);
+
+    // ── BEAT-LOCKED: Punchline appears at video t=17.8 → music t=20.8 ≈ 20.02s cue ──
+    // (drop SFX fires at t=17.2 via audio element, slightly ahead of text appearance)
+    tl.to("#punchline", { opacity: 1, y: 0, duration: 0.45, ease: "power3.out" }, 17.8);
+
+    // Punchline holds then fades, wordmark arrives
+    tl.to("#punchline", { opacity: 0, duration: 0.35, ease: "power2.in" }, 19.1);
+    tl.to("#wordmark",  { opacity: 1, duration: 0.45, ease: "power3.out" }, 19.25);
+
+    // Music fade handled by: bg-music data-volume=0.28; for final fade we'd need automation.
+    // The bell SFX at t=14.0 rings over the music naturally.
+
+    window.__timelines["mycal-brag"] = tl;
+  </script>
+
+</body>
+</html>

@@ -5,7 +5,9 @@ import { TextField } from '@/components/Field'
 import { SegmentedControl } from '@/components/SegmentedControl'
 import { DayMeter } from '@/components/DayMeter'
 import { Callout } from '@/components/Callout'
-import { EnvelopeIcon, FlameIcon, GoogleMark } from '@/components/Icons'
+import { DownloadIcon, EnvelopeIcon, FlameIcon, GoogleMark } from '@/components/Icons'
+import { InstallGuide } from '@/app/InstallGuide'
+import { usePwaInstall } from '@/app/pwa-install'
 import { store } from '@/services/db'
 import { cn } from '@/lib/cn'
 import { kcal } from '@/lib/format'
@@ -31,6 +33,15 @@ export function SignIn() {
   const [pending, setPending] = useState<'form' | 'google' | null>(null)
   /** Set when the project asks for a confirmed address before letting anyone in. */
   const [awaitingInbox, setAwaitingInbox] = useState<string | null>(null)
+  const [installGuideOpen, setInstallGuideOpen] = useState(false)
+  const { canInstall, isInstalled, install } = usePwaInstall()
+
+  async function handleInstall() {
+    // Chromium installs straight from here. Everywhere else, or after the
+    // prompt is dismissed, the guide walks through the browser's own menu.
+    if (canInstall && (await install()) === 'accepted') return
+    setInstallGuideOpen(true)
+  }
 
   async function handleSubmit(event: FormEvent) {
     event.preventDefault()
@@ -179,10 +190,20 @@ export function SignIn() {
         </Button>
       </form>
 
-      <p className="mx-auto mt-8 max-w-[38ch] text-center text-[0.78rem] leading-relaxed text-[var(--color-ink-3)]">
-        MyCal estimates. It is a tracking aid, not medical advice, and every number it
-        produces stays yours to correct.
-      </p>
+      <div className="mt-6 flex flex-col items-center gap-3">
+        {/* Already on the home screen, so there is nothing to offer. */}
+        {!isInstalled && (
+          <Button variant="ghost" icon={<DownloadIcon size={19} strokeWidth={1.9} />} onClick={handleInstall}>
+            Install app
+          </Button>
+        )}
+        <p className="max-w-[38ch] text-center text-[0.78rem] leading-relaxed text-[var(--color-ink-3)]">
+          MyCal estimates. It is a tracking aid, not medical advice, and every number it
+          produces stays yours to correct.
+        </p>
+      </div>
+
+      <InstallGuide open={installGuideOpen} onClose={() => setInstallGuideOpen(false)} />
     </div>
   )
 }

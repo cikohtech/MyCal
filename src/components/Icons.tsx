@@ -187,6 +187,30 @@ export const ShieldIcon = (p: IconProps) => (
   </Icon>
 )
 
+export const DownloadIcon = (p: IconProps) => (
+  <Icon {...p}>
+    <path d="M12 4v10.5M7.5 10 12 14.5 16.5 10" />
+    <path d="M5 19.5h14" />
+  </Icon>
+)
+
+/** The iOS share glyph: a tray with an arrow leaving it. */
+export const ShareIcon = (p: IconProps) => (
+  <Icon {...p}>
+    <path d="M12 3.5v11M8.3 7.2 12 3.5l3.7 3.7" />
+    <path d="M8.5 10H7a2 2 0 0 0-2 2v6.5a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V12a2 2 0 0 0-2-2h-1.5" />
+  </Icon>
+)
+
+/** Android's overflow menu: three stacked dots. */
+export const MoreIcon = (p: IconProps) => (
+  <Icon {...p}>
+    <circle cx="12" cy="5.5" r="1.3" fill="currentColor" stroke="none" />
+    <circle cx="12" cy="12" r="1.3" fill="currentColor" stroke="none" />
+    <circle cx="12" cy="18.5" r="1.3" fill="currentColor" stroke="none" />
+  </Icon>
+)
+
 export const LogOutIcon = (p: IconProps) => (
   <Icon {...p}>
     <path d="M14.5 4.5h3A2 2 0 0 1 19.5 6.5v11a2 2 0 0 1-2 2h-3" />

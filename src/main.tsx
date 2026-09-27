@@ -6,6 +6,7 @@ import { App } from '@/app/App'
 import { SessionProvider } from '@/app/session'
 import { AnalysisJobsProvider } from '@/app/analysis-jobs'
 import { ToastProvider } from '@/components/Toast'
+import { listenForInstallPrompt } from '@/app/pwa-install'
 import '@/index.css'
 
 // Restore the chosen theme before first paint so there is no flash.
@@ -13,6 +14,10 @@ const savedTheme = localStorage.getItem('mycal.theme')
 if (savedTheme === 'light' || savedTheme === 'dark') {
   document.documentElement.setAttribute('data-theme', savedTheme)
 }
+
+// The install offer can arrive before any screen mounts, so start listening
+// for it now rather than from the Install button.
+listenForInstallPrompt()
 
 const queryClient = new QueryClient({
   defaultOptions: {
