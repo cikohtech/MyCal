@@ -128,6 +128,10 @@ export const ANALYSIS_FAILURES: Record<string, { title: string; body: string }> 
     title: 'Too many photos too quickly',
     body: 'Wait a minute before the next analysis, or enter this one by hand.',
   },
+  free_limit_reached: {
+    title: 'Your free photos are used up',
+    body: 'Photo estimates need a paid plan from here on. Your photo is saved — describe the meal yourself, or scan a barcode.',
+  },
   service_unavailable: {
     title: 'The analysis service did not answer',
     body: 'Your photo is saved. Retry in a moment, or describe the meal yourself.',

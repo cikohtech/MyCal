@@ -11,7 +11,7 @@
  */
 import { resolveVisionClient } from '../_shared/ai.ts'
 import {
-  authenticate, corsHeaders, enforceRateLimit, envInt, json, logFailure, type RateRule,
+  authenticate, corsHeaders, enforceRateLimit, envInt, json, logFailure, type Caller, type RateRule,
 } from '../_shared/http.ts'
 import { OUTPUT_SCHEMA, SYSTEM_PROMPT } from './prompt.ts'
 
@@ -81,6 +81,42 @@ function failed(code: string, status = 200, extra: Record<string, unknown> = {})
     },
     status,
   )
+}
+
+/**
+ * Takes one photo from the caller's plan: a free account is refused once its
+ * allowance is spent, a paid one is counted and let through.
+ *
+ * If the plan table cannot be reached the photo goes through unclaimed. The
+ * rate limits still cap what that costs, and a broken counter should not take
+ * the app's main feature away from the people who have paid for it.
+ */
+async function claimPhoto(caller: Caller): Promise<{ allowed: boolean; claimed: boolean }> {
+  try {
+    const { data, error } = await caller.asService
+      .rpc('claim_photo_analysis', { p_user_id: caller.userId })
+    if (error) throw new Error(error.message)
+    const verdict = Array.isArray(data) ? data[0] : data
+    if (!verdict) return { allowed: true, claimed: false }
+    return { allowed: Boolean(verdict.allowed), claimed: Boolean(verdict.allowed) }
+  } catch (error) {
+    logFailure('analyze-food-photo/plan', error)
+    return { allowed: true, claimed: false }
+  }
+}
+
+/**
+ * Gives the photo back. Never throws: it runs from inside the error handler,
+ * and a refund that failed loudly there would be refunded a second time.
+ */
+async function refundPhoto(caller: Caller): Promise<void> {
+  try {
+    const { error } = await caller.asService
+      .rpc('refund_photo_analysis', { p_user_id: caller.userId })
+    if (error) throw new Error(error.message)
+  } catch (error) {
+    logFailure('analyze-food-photo/refund', error)
+  }
 }
 
 let counter = 0
@@ -169,6 +205,11 @@ Deno.serve(async (request) => {
   if (imageError || !image) return json({ error: 'That photo does not exist.' }, 404)
   if (image.status === 'deleted') return failed('unclear_image')
 
+  // Last of the checks, so a request turned away for any other reason never
+  // spends one of somebody's free photos.
+  const plan = await claimPhoto(caller)
+  if (!plan.allowed) return failed('free_limit_reached')
+
   const { data: analysis } = await caller.asService
     .from('ai_analyses')
     .insert({
@@ -184,6 +225,9 @@ Deno.serve(async (request) => {
   const analysisId = analysis?.id ?? null
 
   const finish = async (payload: Record<string, unknown>, status: string, code: string | null) => {
+    // Only a photo that came back with an estimate is counted against the
+    // allowance; a timeout or "no food here" hands it back.
+    if (status === 'failed' && plan.claimed) await refundPhoto(caller)
     if (analysisId) {
       await caller.asService
         .from('ai_analyses')

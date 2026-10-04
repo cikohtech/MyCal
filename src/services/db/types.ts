@@ -1,6 +1,6 @@
 import type {
   AnalysisDraft, BarcodeDraft, FoodEntry, FoodEntryPart, FoodImage, IsoDate,
-  NutritionTarget, Profile, Uuid, WeightEntry,
+  NutritionTarget, PhotoAllowance, Profile, Uuid, WeightEntry,
 } from '@/types/domain'
 
 export interface AppUser {
@@ -78,6 +78,8 @@ export interface DataStore {
   deleteFoodImage(image: FoodImage): Promise<void>
 
   analyzePhoto(userId: Uuid, image: FoodImage, idempotencyKey: string): Promise<AnalysisDraft>
+  /** Null where no allowance applies, or it could not be read — the server enforces it either way. */
+  getPhotoAllowance(userId: Uuid): Promise<PhotoAllowance | null>
   lookupBarcode(userId: Uuid, barcode: string): Promise<BarcodeDraft>
 
   /** Removes every record and image this account owns. */

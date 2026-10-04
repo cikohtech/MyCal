@@ -73,6 +73,7 @@ Use UUID primary keys, `created_at`/`updated_at` timestamps, and `user_id` on al
 | `food_references` | `id`, source, external ID, name, brand, barcode nullable, serving metadata, nutrients per basis | Cached/curated nutrition references; product records are identified by barcode when available. |
 | `food_entries` | `id`, `user_id`, `consumed_on`, meal_type, source, display name, quantity/basis, `nutrition_snapshot`, reference/analysis links nullable | A confirmed top-level consumed food. The snapshot is the historical source for totals. |
 | `food_entry_parts` | `id`, `food_entry_id`, kind (`ingredient`/`extra`), name, quantity, `nutrition_snapshot` | User-added or editable meal components such as rice, oil, sauce, or drink calories. |
+| `user_plans` | `user_id` (PK/FK auth user), email, `is_paid`, `free_photo_limit`, `photos_analyzed` | Free accounts get `free_photo_limit` photo estimates (10 by default). Read-only to the owner; `analyze-food-photo` claims and refunds through service-role functions, and `is_paid` is set by hand in the dashboard until there is a payment flow. |
 
 `nutrition_snapshot` contains calories, protein, carbohydrate, fat, fibre, and available micronutrients for the actual consumed amount—not only per 100 g. Selected frequently queried values may additionally be materialized as numeric columns for indexes and simple aggregations. A generated query/view sums each entry plus its parts by `user_id` and `consumed_on`; do not persist a mutable daily total as an independent source of truth.
 

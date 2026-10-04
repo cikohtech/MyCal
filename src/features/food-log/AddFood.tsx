@@ -2,12 +2,14 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import { useNavigate, useSearchParams } from 'react-router-dom'
 import type { DraftFood, MealType } from '@/types/domain'
 import { useSession } from '@/app/session'
-import { useCreateEntry } from '@/app/queries'
+import { photosLeft, useCreateEntry, usePhotoAllowance } from '@/app/queries'
 import { useAnalysisJobs } from '@/app/analysis-jobs'
 import { Button, IconButton, Spinner } from '@/components/Button'
 import { Callout } from '@/components/Callout'
 import { useToast } from '@/components/Toast'
-import { CameraIcon, CloseIcon, ImageIcon, PencilIcon, PlusIcon, RefreshIcon } from '@/components/Icons'
+import {
+  BarcodeIcon, CameraIcon, CloseIcon, ImageIcon, PencilIcon, PlusIcon, RefreshIcon,
+} from '@/components/Icons'
 import { DraftFoodCard } from '@/features/food-log/DraftFoodCard'
 import { MealPicker } from '@/features/food-log/MealPicker'
 import { blankFood, draftFoods, draftsTotal, failureCopy, toNewEntry } from '@/features/food-log/draft'
@@ -34,6 +36,11 @@ export function AddFood() {
   const userId = user!.id
   const createEntry = useCreateEntry(userId)
   const { get: getJob, start, retry, setMeal: setJobMeal, complete, discard } = useAnalysisJobs()
+  const allowance = usePhotoAllowance(userId).data
+  const freeLeft = photosLeft(allowance)
+  // Only ever what is already known. Waiting on the network here would hold up
+  // the camera, and the edge function turns an exhausted account away anyway.
+  const outOfPhotos = freeLeft === 0
 
   const cameraFileRef = useRef<HTMLInputElement>(null)
   const fileRef = useRef<HTMLInputElement>(null)
@@ -60,11 +67,12 @@ export function AddFood() {
   // in the background, which meant re-prompting on every relaunch; handing
   // the shot off to the native camera (like a plain `capture` file input)
   // sidesteps that permission entirely, same as the file library button below.
+  // No point opening it on a photo that cannot be read.
   useEffect(() => {
-    if (reviewing || openedCamera.current) return
+    if (reviewing || openedCamera.current || outOfPhotos) return
     openedCamera.current = true
     cameraFileRef.current?.click()
-  }, [reviewing])
+  }, [reviewing, outOfPhotos])
 
   // "By hand" is a navigation, not a state change, so the same component stays
   // mounted and its initial state does not run again. Without this, arriving at
@@ -157,23 +165,45 @@ export function AddFood() {
           <IconButton label="Cancel" tone="overlay" onClick={() => navigate('/today')}>
             <CloseIcon size={19} strokeWidth={2.2} />
           </IconButton>
-          <p className="text-[0.92rem] font-semibold">Photograph your meal</p>
+          <div className="text-center">
+            <p className="text-[0.92rem] font-semibold">Photograph your meal</p>
+            {freeLeft !== null && freeLeft > 0 && (
+              <p className="tnum text-[0.74rem] text-white/60">
+                {freeLeft === 1 ? '1 free photo left' : `${freeLeft} free photos left`}
+              </p>
+            )}
+          </div>
           <span className="w-[36px]" />
         </div>
 
         <div className="relative flex-1 grid place-items-center">
-          {/* The tap here is what gives the input.click() below a genuine user
-              gesture if the auto-open above got missed or blocked. */}
-          <button
-            type="button"
-            onClick={() => cameraFileRef.current?.click()}
-            className="press flex flex-col items-center gap-3 text-white/85"
-          >
-            <span className="grid h-[92px] w-[92px] place-items-center rounded-full border-[3px] border-white/70">
-              <CameraIcon size={34} />
-            </span>
-            <span className="text-[0.9rem] font-medium">Tap to open the camera</span>
-          </button>
+          {outOfPhotos ? (
+            <div className="flex max-w-[32ch] flex-col items-center gap-3 px-6 text-center text-white">
+              <span className="grid h-[92px] w-[92px] place-items-center rounded-full border-[3px] border-white/25 text-white/50">
+                <CameraIcon size={34} />
+              </span>
+              <p className="text-[1.05rem] font-semibold">
+                Your {allowance!.free_photo_limit} free photos are used up
+              </p>
+              <p className="text-[0.88rem] leading-relaxed text-white/70">
+                Photo estimates need a paid plan from here on. Scanning a barcode and
+                typing a meal in are still free.
+              </p>
+            </div>
+          ) : (
+            // The tap here is what gives the input.click() below a genuine user
+            // gesture if the auto-open above got missed or blocked.
+            <button
+              type="button"
+              onClick={() => cameraFileRef.current?.click()}
+              className="press flex flex-col items-center gap-3 text-white/85"
+            >
+              <span className="grid h-[92px] w-[92px] place-items-center rounded-full border-[3px] border-white/70">
+                <CameraIcon size={34} />
+              </span>
+              <span className="text-[0.9rem] font-medium">Tap to open the camera</span>
+            </button>
+          )}
         </div>
 
         {error && (
@@ -183,13 +213,26 @@ export function AddFood() {
         )}
 
         <div className="flex items-center justify-center gap-12 px-9 pb-safe pt-6">
-          <button
-            type="button" onClick={() => fileRef.current?.click()}
-            className="press flex flex-col items-center gap-1.5 text-[0.72rem] font-medium text-white/80"
-          >
-            <ImageIcon size={24} />
-            Library
-          </button>
+          {/* A library photo would be turned away just the same, so the free
+              way to log a packet takes its place. */}
+          {outOfPhotos ? (
+            <button
+              type="button"
+              onClick={() => navigate('/scan', { replace: true })}
+              className="press flex flex-col items-center gap-1.5 text-[0.72rem] font-medium text-white/80"
+            >
+              <BarcodeIcon size={24} />
+              Barcode
+            </button>
+          ) : (
+            <button
+              type="button" onClick={() => fileRef.current?.click()}
+              className="press flex flex-col items-center gap-1.5 text-[0.72rem] font-medium text-white/80"
+            >
+              <ImageIcon size={24} />
+              Library
+            </button>
+          )}
 
           <button
             type="button"

@@ -3,9 +3,11 @@ import {
   type ReactNode,
 } from 'react'
 import { useNavigate } from 'react-router-dom'
+import { useQueryClient } from '@tanstack/react-query'
 import type { AnalysisDraft, FoodImage, MealType } from '@/types/domain'
 import { store } from '@/services/db'
 import { useSession } from '@/app/session'
+import { keys } from '@/app/queries'
 import { useToast } from '@/components/Toast'
 import { ImageError, prepareImage } from '@/services/camera'
 import { suggestMeal } from '@/lib/meals'
@@ -104,6 +106,7 @@ export function AnalysisJobsProvider({ children }: { children: ReactNode }) {
   const { user, loading, today } = useSession()
   const toast = useToast()
   const navigate = useNavigate()
+  const queryClient = useQueryClient()
   const userId = user?.id ?? null
 
   const [jobs, setJobs] = useState<AnalysisJob[]>([])
@@ -167,6 +170,8 @@ export function AnalysisJobsProvider({ children }: { children: ReactNode }) {
       // carrying its own failure code, which the card turns into a way out.
       const draft = await store.analyzePhoto(userId, image, idempotencyKey)
       patch(id, { draft, stage: 'ready', error: null })
+      // Every answer may have spent a free photo, or found out there are none.
+      void queryClient.invalidateQueries({ queryKey: keys.photoAllowance(userId) })
 
       if (draft.status !== 'failed' && draft.foods.length) {
         toast.done(
@@ -184,7 +189,7 @@ export function AnalysisJobsProvider({ children }: { children: ReactNode }) {
     } finally {
       running.current.delete(id)
     }
-  }, [navigate, patch, toast, userId])
+  }, [navigate, patch, queryClient, toast, userId])
 
   const start = useCallback((blob: Blob, options?: { meal?: MealType; consumedOn?: string }) => {
     const id = uuid()

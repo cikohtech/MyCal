@@ -89,6 +89,17 @@ export interface AiAnalysis {
 }
 
 /**
+ * What an account may still spend on photo estimates. Read-only from here:
+ * the edge function spends it, and is_paid is set by hand in the database.
+ */
+export interface PhotoAllowance {
+  is_paid: boolean
+  free_photo_limit: number
+  /** Photos that came back with an estimate; failures are not counted. */
+  photos_analyzed: number
+}
+
+/**
  * Micronutrients are sparse on purpose. A key that is absent means
  * "not available" — it never means zero.
  */

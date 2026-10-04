@@ -4,7 +4,8 @@ import { useQueryClient } from '@tanstack/react-query'
 import type { ActivityLevel, Goal, SexForBmr, UnitPreference } from '@/types/domain'
 import { useSession } from '@/app/session'
 import {
-  useCreateTarget, useSaveProfile, useTargetOn, useTargets, useWeights,
+  photosLeft, useCreateTarget, usePhotoAllowance, useSaveProfile, useTargetOn, useTargets,
+  useWeights,
 } from '@/app/queries'
 import { store } from '@/services/db'
 import { Button } from '@/components/Button'
@@ -14,7 +15,7 @@ import { ListGroup, ListRow } from '@/components/List'
 import { Sheet } from '@/components/Sheet'
 import { Callout } from '@/components/Callout'
 import { useToast } from '@/components/Toast'
-import { LogOutIcon, PencilIcon, ShieldIcon, TrashIcon } from '@/components/Icons'
+import { CameraIcon, LogOutIcon, PencilIcon, ShieldIcon, TrashIcon } from '@/components/Icons'
 import { ACTIVITY_LABELS, GOAL_LABELS, bmiBand, buildTarget } from '@/lib/calc'
 import { friendlyDate, supportedTimezones } from '@/lib/dates'
 import { height as formatHeight, kcal, weight as formatWeight } from '@/lib/format'
@@ -33,6 +34,8 @@ export function Profile() {
   const targetQuery = useTargetOn(userId, today)
   const targetsQuery = useTargets(userId)
   const weightsQuery = useWeights(userId)
+  const allowance = usePhotoAllowance(userId).data
+  const freeLeft = photosLeft(allowance)
 
   const [editing, setEditing] = useState(false)
   const [confirmWipe, setConfirmWipe] = useState(false)
@@ -236,6 +239,30 @@ export function Profile() {
                 value={`${kcal(entry.calorie_target_kcal)} kcal`}
               />
             ))}
+          </ListGroup>
+        </div>
+      )}
+
+      {allowance && (
+        <div className="mt-6">
+          <ListGroup label="Plan">
+            <ListRow
+              icon={<CameraIcon size={17} />}
+              iconTone={freeLeft === 0 ? 'var(--color-critical)' : 'var(--color-tint)'}
+              title={allowance.is_paid ? 'Paid' : 'Free'}
+              detail={
+                allowance.is_paid
+                  ? 'Photo estimates without a cap'
+                  : freeLeft === 0
+                    ? 'Photo estimates need a paid plan. Barcodes and typing a meal in stay free.'
+                    : `${allowance.free_photo_limit} photo estimates, then a paid plan`
+              }
+              value={
+                allowance.is_paid
+                  ? `${allowance.photos_analyzed} used`
+                  : `${freeLeft} of ${allowance.free_photo_limit} left`
+              }
+            />
           </ListGroup>
         </div>
       )}

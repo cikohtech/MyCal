@@ -2,6 +2,8 @@ import { NavLink, Outlet, useLocation, useNavigate } from 'react-router-dom'
 import { BarcodeIcon, CameraIcon, LedgerIcon, PersonIcon, ScaleIcon } from '@/components/Icons'
 import { cn } from '@/lib/cn'
 import { store } from '@/services/db'
+import { useSession } from '@/app/session'
+import { usePhotoAllowance } from '@/app/queries'
 
 /** Two tabs, the capture button, two tabs — a balanced native bar. */
 const TABS = [
@@ -15,6 +17,10 @@ const TABS = [
 export function AppShell() {
   const navigate = useNavigate()
   const { pathname } = useLocation()
+  const { user } = useSession()
+  // Fetched here only to have it in hand by the time the camera button is
+  // pressed: the camera screen reads what is cached rather than wait for it.
+  usePhotoAllowance(user!.id)
   const fullScreenFlow = pathname.startsWith('/add')
     || pathname.startsWith('/scan')
     || pathname.startsWith('/entry')

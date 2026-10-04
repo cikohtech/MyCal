@@ -5,7 +5,7 @@
  */
 import type {
   AnalysisDraft, BarcodeDraft, FoodEntry, FoodEntryPart, FoodImage, IsoDate,
-  NutritionTarget, Profile, Uuid, WeightEntry,
+  NutritionTarget, PhotoAllowance, Profile, Uuid, WeightEntry,
 } from '@/types/domain'
 import type {
   AppUser, DataStore, EntryPatch, NewEntry, NewTarget, SignUpResult,
@@ -329,6 +329,16 @@ export class SupabaseStore implements DataStore {
       }
     }
     return data
+  }
+
+  async getPhotoAllowance(userId: Uuid): Promise<PhotoAllowance | null> {
+    const { data, error } = await requireSupabase()
+      .from('user_plans').select('is_paid, free_photo_limit, photos_analyzed')
+      .eq('user_id', userId).maybeSingle()
+    // Not worth an error screen: this only decides what the UI warns about,
+    // and the edge function refuses an exhausted account regardless.
+    if (error) return null
+    return data as PhotoAllowance | null
   }
 
   async lookupBarcode(_userId: Uuid, barcode: string): Promise<BarcodeDraft> {

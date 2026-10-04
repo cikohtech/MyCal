@@ -308,6 +308,11 @@ export class LocalStore implements DataStore {
     }
   }
 
+  /** No model here, so nothing to ration. */
+  async getPhotoAllowance(): Promise<null> {
+    return null
+  }
+
   async lookupBarcode(_userId: Uuid, barcode: string): Promise<BarcodeDraft> {
     const cache = read<Record<string, BarcodeDraft>>('barcodes', {})
     if (cache[barcode]) return cache[barcode]

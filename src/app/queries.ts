@@ -1,5 +1,5 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import type { FoodEntry, IsoDate, NutritionTarget, Profile } from '@/types/domain'
+import type { FoodEntry, IsoDate, NutritionTarget, PhotoAllowance, Profile } from '@/types/domain'
 import { store, type EntryPatch, type NewEntry, type NewTarget } from '@/services/db'
 
 export const keys = {
@@ -9,6 +9,21 @@ export const keys = {
   entries: (userId: string, date: IsoDate) => ['entries', userId, date] as const,
   entriesRange: (userId: string, from: IsoDate, to: IsoDate) => ['entries-range', userId, from, to] as const,
   weights: (userId: string) => ['weights', userId] as const,
+  photoAllowance: (userId: string) => ['photo-allowance', userId] as const,
+}
+
+export function usePhotoAllowance(userId: string) {
+  return useQuery({
+    queryKey: keys.photoAllowance(userId),
+    queryFn: () => store.getPhotoAllowance(userId),
+    staleTime: 30_000,
+  })
+}
+
+/** Free photos still to spend; null when the account is paid or nothing is rationed. */
+export function photosLeft(allowance: PhotoAllowance | null | undefined): number | null {
+  if (!allowance || allowance.is_paid) return null
+  return Math.max(0, allowance.free_photo_limit - allowance.photos_analyzed)
 }
 
 export function useEntries(userId: string, date: IsoDate) {
