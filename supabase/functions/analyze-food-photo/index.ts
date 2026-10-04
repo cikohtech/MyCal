@@ -13,6 +13,7 @@ import { resolveVisionClient } from '../_shared/ai.ts'
 import {
   authenticate, corsHeaders, enforceRateLimit, envInt, json, logFailure, type Caller, type RateRule,
 } from '../_shared/http.ts'
+import { type ModelNutrition, sanitizeNutrition } from '../_shared/nutrition.ts'
 import { OUTPUT_SCHEMA, SYSTEM_PROMPT } from './prompt.ts'
 
 const BUCKET = 'food-images'
@@ -44,15 +45,6 @@ const RATE_RULES: RateRule[] = [
 interface RequestBody {
   food_image_id?: string
   idempotency_key?: string
-}
-
-interface ModelNutrition {
-  calories_kcal: number
-  protein_g: number
-  carbs_g: number
-  fat_g: number
-  fibre_g: number | null
-  micronutrients: Record<string, number>
 }
 
 interface ModelResult {
@@ -121,32 +113,6 @@ async function refundPhoto(caller: Caller): Promise<void> {
 
 let counter = 0
 const tempId = (prefix: string) => `${prefix}_${Date.now().toString(36)}_${counter++}`
-
-/** Drops anything the model may have hallucinated outside a plausible range. */
-function sanitizeNutrition(input: ModelNutrition): ModelNutrition {
-  const clamp = (value: unknown, max: number): number => {
-    const number = Number(value)
-    return Number.isFinite(number) && number >= 0 ? Math.min(number, max) : 0
-  }
-  const micronutrients: Record<string, number> = {}
-  for (const [key, value] of Object.entries(input?.micronutrients ?? {})) {
-    // A null is the model saying "unknown"; only a real reading gets recorded.
-    if (value === null || value === undefined || value === '') continue
-    const number = Number(value)
-    if (Number.isFinite(number) && number >= 0) micronutrients[key] = number
-  }
-  return {
-    calories_kcal: clamp(input?.calories_kcal, 5000),
-    protein_g: clamp(input?.protein_g, 500),
-    carbs_g: clamp(input?.carbs_g, 1000),
-    fat_g: clamp(input?.fat_g, 500),
-    fibre_g:
-      input?.fibre_g === null || input?.fibre_g === undefined
-        ? null
-        : clamp(input.fibre_g, 200),
-    micronutrients,
-  }
-}
 
 Deno.serve(async (request) => {
   if (request.method === 'OPTIONS') return new Response('ok', { headers: corsHeaders })

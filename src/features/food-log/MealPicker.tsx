@@ -5,13 +5,16 @@ import { cn } from '@/lib/cn'
 interface Props {
   value: MealType
   onChange: (meal: MealType) => void
+  /** Radios group by name, so two pickers on one screen each need their own. */
+  name?: string
+  legend?: string
 }
 
 /** Chips, because five short peers read faster than a list of five rows. */
-export function MealPicker({ value, onChange }: Props) {
+export function MealPicker({ value, onChange, name = 'meal', legend = 'Which meal?' }: Props) {
   return (
     <fieldset>
-      <legend className="group-label px-0 pb-2.5">Which meal?</legend>
+      <legend className="group-label px-0 pb-2.5">{legend}</legend>
       <div className="flex flex-wrap gap-2">
         {MEAL_ORDER.map((meal) => {
           const selected = meal === value
@@ -26,7 +29,7 @@ export function MealPicker({ value, onChange }: Props) {
               )}
             >
               <input
-                type="radio" name="meal" value={meal} checked={selected}
+                type="radio" name={name} value={meal} checked={selected}
                 onChange={() => onChange(meal)} className="sr-only"
               />
               <span

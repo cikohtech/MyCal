@@ -76,8 +76,11 @@ client_id = "env(SUPABASE_AUTH_GOOGLE_CLIENT_ID)"
 secret = "env(SUPABASE_AUTH_GOOGLE_SECRET)"
 skip_nonce_check = false
 
-# Both functions verify the caller's JWT themselves before touching anything.
+# Every function verifies the caller's JWT itself before touching anything.
 [functions.analyze-food-photo]
+verify_jwt = true
+
+[functions.analyze-food-voice]
 verify_jwt = true
 
 [functions.lookup-barcode]

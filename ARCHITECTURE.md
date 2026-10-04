@@ -17,6 +17,8 @@ Separate food-image AI API ───► nutrition-reference matching
        └── estimates returned for user review
 
 Browser camera ──► barcode decoder ──► product lookup/cache ──► reviewed food entry
+
+Browser microphone ──► analyze-food-voice ──► transcription ──► reading ──► reviewed food entries
 ```
 
 Keep this a modular monolith. Supabase Edge Functions are the integration boundary for privileged calls; no Kubernetes, event bus, or independent domain microservices are needed for the MVP.
@@ -32,6 +34,7 @@ src/
     onboarding/   profile and target setup
     dashboard/    daily summary and meal groups
     food-log/     entry review, editing, additions, image states
+    voice/        recording, silence and interruption handling, typed fallback
     barcode/      camera scan and product confirmation
     weight/       entries and trend display
     profile/      inputs, targets, account/privacy controls
@@ -55,6 +58,7 @@ PWA work should start with a valid web manifest, icons, and a conservative servi
 - **RLS:** enabled on every user-owned table. Browser access is restricted to records where `user_id = auth.uid()`.
 - **Storage:** a private `food-images` bucket. Object keys begin with the owner UUID and policies validate that prefix.
 - **Edge Functions:** verify the user JWT, enforce ownership, create short-lived signed image URLs, call the external AI API, and perform trusted product-provider lookups/caching.
+- **Speech:** transcription always runs on OpenAI (`OPENAI_TRANSCRIBE_MODEL`, default `gpt-4o-transcribe`, falling back to `whisper-1`), because Anthropic has no speech-to-text endpoint. The words are then read by whichever provider is configured, through the same adapter.
 - **AI provider:** chosen by which key is in the function secrets, behind one adapter in `supabase/functions/_shared/ai.ts` (`OPENAI_API_KEY` or `ANTHROPIC_API_KEY`, with `AI_PROVIDER` breaking a tie). The adapter takes an image and a JSON Schema and returns the model's JSON, so the analysis function, the prompt and the stored result are the same either way; only the recorded `model` differs.
 
 Service-role keys live only in server-side secrets. The client uses the anon key plus its authenticated session, which is safe only because RLS and Storage policies are enforced.
@@ -69,11 +73,11 @@ Use UUID primary keys, `created_at`/`updated_at` timestamps, and `user_id` on al
 | `nutrition_targets` | `id`, `user_id`, `effective_on`, calculation input snapshot, bmi, bmr_kcal, tdee_kcal, calorie_target_kcal, macro targets | Versioned target output; current target has the latest effective date. |
 | `weight_entries` | `id`, `user_id`, `recorded_on`, weight_kg, optional note | Dated body weight, unique per user/date initially. |
 | `food_images` | `id`, `user_id`, storage path, MIME type, size, status | Private image metadata; never store a permanent public URL. |
-| `ai_analyses` | `id`, `user_id`, `food_image_id`, status, model/version, result JSON, failure code | Auditable, short-lived working record of AI estimates and matching outcomes. |
+| `ai_analyses` | `id`, `user_id`, `food_image_id` (null for voice), `input_kind` (`photo`/`voice`/`text`), status, model/version, result JSON, failure code | Auditable, short-lived working record of AI estimates and matching outcomes. A voice log's transcript lives in its result; it has no image to cascade from, so discarding the log and "delete everything" remove it by id. |
 | `food_references` | `id`, source, external ID, name, brand, barcode nullable, serving metadata, nutrients per basis | Cached/curated nutrition references; product records are identified by barcode when available. |
 | `food_entries` | `id`, `user_id`, `consumed_on`, meal_type, source, display name, quantity/basis, `nutrition_snapshot`, reference/analysis links nullable | A confirmed top-level consumed food. The snapshot is the historical source for totals. |
 | `food_entry_parts` | `id`, `food_entry_id`, kind (`ingredient`/`extra`), name, quantity, `nutrition_snapshot` | User-added or editable meal components such as rice, oil, sauce, or drink calories. |
-| `user_plans` | `user_id` (PK/FK auth user), email, `is_paid`, `free_photo_limit`, `photos_analyzed` | Free accounts get `free_photo_limit` photo estimates (10 by default). Read-only to the owner; `analyze-food-photo` claims and refunds through service-role functions, and `is_paid` is set by hand in the dashboard until there is a payment flow. |
+| `user_plans` | `user_id` (PK/FK auth user), email, `is_paid`, `free_photo_limit`, `photos_analyzed`, `free_voice_limit`, `voice_logs_analyzed` | Free accounts get `free_photo_limit` photo estimates and `free_voice_limit` voice logs (10 each by default), counted separately. Read-only to the owner; the analysis functions claim and refund through service-role functions, and `is_paid` is set by hand in the dashboard until there is a payment flow. |
 
 `nutrition_snapshot` contains calories, protein, carbohydrate, fat, fibre, and available micronutrients for the actual consumed amount—not only per 100 g. Selected frequently queried values may additionally be materialized as numeric columns for indexes and simple aggregations. A generated query/view sums each entry plus its parts by `user_id` and `consumed_on`; do not persist a mutable daily total as an independent source of truth.
 
@@ -130,6 +134,7 @@ On a stable code, the client calls a protected `lookup-barcode` function. The fu
 | --- | --- | --- |
 | Supabase client CRUD | Authenticated browser | Profile, targets, weight entries, confirmed food entries/parts under RLS. |
 | `analyze-food-photo` function | Authenticated browser | Ownership checks, private-image handoff, AI invocation, analysis records/drafts. |
+| `analyze-food-voice` function | Authenticated browser | Recording (multipart) or typed text in, transcription, reading into a draft, analysis record with transcript. Never stores audio. |
 | Separate AI API | Edge Function only | Food recognition, portion estimate, confidence, candidate nutrition estimate. |
 | `lookup-barcode` function | Authenticated browser | Cache/provider lookup and normalized product draft. |
 | Product data provider | Edge Function only | Supplemental packaged-food data; never a direct browser secret. |
@@ -151,6 +156,26 @@ Capture/select image
   → food_entries + food_entry_parts snapshots saved for local current date
   → daily aggregate query refreshes dashboard
 ```
+
+## Data flow: voice logging
+
+```text
+Tap the microphone (AudioContext created inside the tap, for iOS)
+  → getUserMedia + MediaRecorder: WebM/Opus, or MP4/AAC on Safari; ≤ 3 min
+  → level meter on a timer: a recording with no talking is held, not sent
+  → screen kept awake; leaving the app ends the take and offers what was said
+  → job queue (clip mirrored to IndexedDB so a reload can resume it)
+  → analyze-food-voice: JWT, rate limit, free allowance, transcription
+  → the configured model reads the transcript into foods, each with its meal
+    and the phrase it came from; corrections, other people's food, plans and
+    skipped items are resolved or left out
+  → server keeps only each dish's remainder after its listed parts, so a
+    dish reported as a total is never counted twice
+  → editable draft with transcript, per-food meals and a today/yesterday choice
+  → user confirms → food_entries (source voice_ai) for that day
+```
+
+A failure after transcription still returns the transcript, and a retry sends those words back rather than the audio, so transcription is never paid for twice. Failures that a second try cannot change — silence, nothing edible said — offer a new recording instead of a retry. Typing the description is the fallback wherever a microphone is missing, refused or unsuitable, and runs through the same function.
 
 ## Data flow: barcode scanning
 

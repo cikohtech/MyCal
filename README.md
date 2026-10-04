@@ -18,6 +18,13 @@ produces is treated as more authoritative than the person using it.
   background: the shutter returns you to your day, a card there shows the photo
   working, and the estimate opens when you choose to open it. Nothing reaches
   your day until you have reviewed it and saved.
+- **Voice logging** lets you say what you ate the way you would tell a friend —
+  amounts, corrections, three meals in one breath. The recording is transcribed
+  and read into the same editable draft a photo produces, each food filed under
+  the meal you mentioned it with. What other people ate, what you only plan to
+  eat and what you say you skipped are left out. It is one way: nothing asks
+  you questions back. The recording is never stored, only its transcript, and
+  you can type the same description instead when talking is not an option.
 - **Barcode scanning** decodes UPC/EAN on-device and looks the product up
   through a cached, rate-limited function. Package nutrition is preferred over
   an estimate; you still set the amount and confirm.
@@ -57,7 +64,7 @@ the browser. This is the fastest way to see the whole product.
 ```bash
 cp .env.example .env.local     # fill in your project URL and anon key
 supabase db push               # applies everything in supabase/migrations/
-supabase functions deploy analyze-food-photo lookup-barcode
+supabase functions deploy analyze-food-photo analyze-food-voice lookup-barcode
 supabase secrets set OPENAI_API_KEY=sk-...        # or ANTHROPIC_API_KEY=sk-ant-...
 ```
 
@@ -68,6 +75,13 @@ otherwise). `OPENAI_MODEL` and `ANTHROPIC_MODEL` override the defaults of
 `gpt-5.5` and `claude-opus-5`; both must be able to read an image and return
 structured JSON. With no key set, the photo screen reports that analysis is
 unavailable and the rest of the app carries on.
+
+Voice logging reads with the same provider, but turning speech into words
+always needs `OPENAI_API_KEY` — Anthropic has no transcription endpoint. On a
+Claude-only deployment a typed description still works and a recording is
+refused with a message that says so. `OPENAI_TRANSCRIBE_MODEL` overrides the
+default `gpt-4o-transcribe`; if the configured model does not exist the
+function falls back to `whisper-1`.
 
 ### Deploying the client
 
@@ -125,14 +139,15 @@ shared table, so every edge-function instance agrees on the total, which the
 old in-memory map could not.
 
 Defaults are 8 analyses a minute, 40 an hour and 120 a day per account, and
-15 / 80 / 300 per address. Every one is a function secret if your traffic looks
+15 / 80 / 300 per address. Voice logs are counted separately: 6 / 40 / 120 per
+account and 12 / 80 / 300 per address. Every one is a function secret if your traffic looks
 different:
 
 ```bash
 supabase secrets set ANALYZE_USER_PER_DAY=60 ANALYZE_IP_PER_HOUR=40
 ```
 
-`ANALYZE_*` and `BARCODE_*`, each in `USER|IP` × `PER_MINUTE|PER_HOUR|PER_DAY`.
+`ANALYZE_*`, `VOICE_*` and `BARCODE_*`, each in `USER|IP` × `PER_MINUTE|PER_HOUR|PER_DAY`.
 Set `RATE_LIMIT_SALT` too — addresses are hashed before they are written down,
 and that is the salt. A rate-limited caller gets a real number back and the app
 says how long to wait.
@@ -147,6 +162,9 @@ The AI key never appears in the client, whichever provider it belongs to.
 Photo analysis runs in `analyze-food-photo`, which verifies the caller's JWT, verifies they own the
 image, downloads the bytes itself rather than handing a storage URL to a third
 party, and writes an auditable `ai_analyses` row. It never creates a food entry.
+`analyze-food-voice` does the same for a recording, which arrives in the request
+and goes no further than the transcription model; the transcript is what is
+kept, and "delete everything" removes it with the rest.
 
 ## How it is put together
 
@@ -159,16 +177,17 @@ src/
     onboarding/   profile and first target
     dashboard/    the day: meter, macros, ledger, micronutrients, trend
     food-log/     capture, review, edit, additions
+    voice/        recording, and typing a meal in the same words
     barcode/      scanning and product confirmation
     weight/       weigh-ins and trend
     profile/      inputs, target history, appearance, data controls
   lib/            calculations, timezone dates, nutrients, formatting
-  services/       data store (Supabase | on-device), camera, barcode
+  services/       data store (Supabase | on-device), camera, microphone, barcode
   types/          domain types
 supabase/
   migrations/     schema, indexes, RLS, storage policies, daily-totals view,
                   the shared rate-limit counter
-  functions/      analyze-food-photo, lookup-barcode
+  functions/      analyze-food-photo, analyze-food-voice, lookup-barcode
   templates/      the emails Supabase sends: confirm, magic link, recovery,
                   email change, invite
 ```

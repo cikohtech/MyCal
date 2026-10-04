@@ -12,7 +12,7 @@ export type ActivityLevel = 'sedentary' | 'light' | 'moderate' | 'very' | 'extra
 export type Goal = 'lose' | 'maintain' | 'gain'
 export type UnitPreference = 'metric' | 'imperial'
 export type MealType = 'breakfast' | 'lunch' | 'dinner' | 'snack' | 'unassigned'
-export type EntrySource = 'photo_ai' | 'barcode' | 'manual'
+export type EntrySource = 'photo_ai' | 'voice_ai' | 'barcode' | 'manual'
 export type PartKind = 'ingredient' | 'extra'
 
 export interface Profile {
@@ -89,14 +89,18 @@ export interface AiAnalysis {
 }
 
 /**
- * What an account may still spend on photo estimates. Read-only from here:
- * the edge function spends it, and is_paid is set by hand in the database.
+ * What an account may still spend on AI estimates, photo and voice. Read-only
+ * from here: the edge functions spend it, and is_paid is set by hand in the
+ * database.
  */
 export interface PhotoAllowance {
   is_paid: boolean
   free_photo_limit: number
   /** Photos that came back with an estimate; failures are not counted. */
   photos_analyzed: number
+  /** Absent until the voice migration has run on the project. */
+  free_voice_limit?: number
+  voice_logs_analyzed?: number
 }
 
 /**
@@ -182,6 +186,13 @@ export interface DraftFood {
   provenance: 'reference' | 'estimate' | 'label'
   nutrition: NutritionSnapshot
   ingredients: DraftPart[]
+  /**
+   * The meal a voice log said this belonged to. Absent on every other kind of
+   * draft, where one meal is chosen for the lot.
+   */
+  meal?: MealType | null
+  /** The words of a voice log this food came from, so the person can see why it is here. */
+  said?: string | null
 }
 
 export interface DraftPart {
@@ -203,6 +214,25 @@ export interface AnalysisDraft {
   failure_code: string | null
   /** How long a rate-limited caller should wait, so the UI can say a number. */
   retry_after_seconds?: number | null
+  /** What a voice log heard, or what was typed in its place. Failures carry it too. */
+  transcript?: string | null
+  /** A voice log can describe last night; everything else is today. */
+  day?: 'today' | 'yesterday' | null
+}
+
+/** What a voice log is given: a recording, or the same description typed. */
+export type VoiceInput =
+  | { kind: 'audio'; blob: Blob; mimeType: string; durationMs: number }
+  /**
+   * `transcribed` marks the words of an earlier recording being read again,
+   * so the model still expects recognition errors in them.
+   */
+  | { kind: 'text'; text: string; transcribed?: boolean }
+
+/** What the person's clock and habits say, so "this morning" means something. */
+export interface VoiceContext {
+  timezone: string
+  units: UnitPreference
 }
 
 export interface BarcodeDraft {

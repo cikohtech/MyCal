@@ -1,27 +1,44 @@
-import { useState } from 'react'
-import type { DraftFood } from '@/types/domain'
+import { useRef, useState } from 'react'
+import type { DraftFood, MealType } from '@/types/domain'
 import { TextField } from '@/components/Field'
 import { IconButton } from '@/components/Button'
 import { NutritionFields } from '@/features/food-log/NutritionFields'
 import { PartsEditor } from '@/features/food-log/PartsEditor'
+import { MealPicker } from '@/features/food-log/MealPicker'
 import { draftTotal } from '@/features/food-log/draft'
 import { EstimateTag } from '@/components/Callout'
 import { ChevronDownIcon, TrashIcon } from '@/components/Icons'
 import { scaleSnapshot } from '@/lib/calc'
 import { kcal } from '@/lib/format'
+import { MEAL_COLORS, MEAL_LABELS } from '@/lib/meals'
 
 interface Props {
   food: DraftFood
   onChange: (food: DraftFood) => void
   onRemove: () => void
   defaultOpen?: boolean
+  /**
+   * A voice log can name a different meal for each food. Given these, the card
+   * lets this one food be moved; `showMeal` also puts its meal on the summary
+   * line, for when the foods on screen do not all share one.
+   */
+  meal?: MealType
+  onMealChange?: (meal: MealType) => void
+  showMeal?: boolean
 }
 
 /** One suggested food, fully editable before anything is saved. */
-export function DraftFoodCard({ food, onChange, onRemove, defaultOpen = false }: Props) {
+export function DraftFoodCard({
+  food, onChange, onRemove, defaultOpen = false, meal, onMealChange, showMeal = false,
+}: Props) {
   const [open, setOpen] = useState(defaultOpen)
   const [baseNutrition] = useState(food.nutrition)
   const [baseQuantity] = useState(food.quantity || 1)
+  /**
+   * The amount the parts were last scaled to. They follow it from there rather
+   * than from a starting copy, so an ingredient edited by hand keeps its edit.
+   */
+  const partsQuantity = useRef(food.quantity || 1)
 
   const total = draftTotal(food)
 
@@ -31,10 +48,21 @@ export function DraftFoodCard({ food, onChange, onRemove, defaultOpen = false }:
       onChange({ ...food, quantity: Number(raw) || 0 })
       return
     }
+    const factor = quantity / partsQuantity.current
+    partsQuantity.current = quantity
     onChange({
       ...food,
       quantity,
       nutrition: scaleSnapshot(baseNutrition, quantity / baseQuantity),
+      // A dish's own components grow with it — two plates is twice the rice.
+      // An extra added on the side, like a drink, does not.
+      ingredients: food.ingredients.map((part) => (part.kind === 'ingredient'
+        ? {
+          ...part,
+          quantity: part.quantity === null ? null : Math.round(part.quantity * factor * 100) / 100,
+          nutrition: scaleSnapshot(part.nutrition, factor),
+        }
+        : part)),
     })
   }
 
@@ -59,7 +87,22 @@ export function DraftFoodCard({ food, onChange, onRemove, defaultOpen = false }:
               {food.confidence !== null && (
                 <span className="tnum">{Math.round(food.confidence * 100)}% sure</span>
               )}
+              {showMeal && meal && (
+                <span className="flex items-center gap-1.5">
+                  <span
+                    className="h-2 w-2 rounded-full" aria-hidden="true"
+                    style={{ background: MEAL_COLORS[meal] }}
+                  />
+                  {MEAL_LABELS[meal]}
+                </span>
+              )}
             </span>
+            {/* The words this came from: why it is on the list at all. */}
+            {food.said && (
+              <span className="mt-1 block truncate text-[0.78rem] italic text-[var(--color-ink-3)]">
+                “{food.said}”
+              </span>
+            )}
           </span>
           <span className="flex shrink-0 items-center gap-2">
             <span className="tnum text-[1.05rem] font-semibold">{kcal(total.calories_kcal)}</span>
@@ -104,6 +147,13 @@ export function DraftFoodCard({ food, onChange, onRemove, defaultOpen = false }:
               placeholder="g, plate, cup"
             />
           </div>
+
+          {meal && onMealChange && (
+            <MealPicker
+              name={`meal-${food.temp_id}`} legend="Which meal was this?"
+              value={meal} onChange={onMealChange}
+            />
+          )}
 
           <NutritionFields
             value={food.nutrition}

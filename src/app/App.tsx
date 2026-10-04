@@ -12,6 +12,7 @@ import { UpdatePrompt } from '@/app/UpdatePrompt'
 // first paint on a phone carries only what it needs.
 const Onboarding = lazy(() => import('@/features/onboarding/Onboarding').then((m) => ({ default: m.Onboarding })))
 const AddFood = lazy(() => import('@/features/food-log/AddFood').then((m) => ({ default: m.AddFood })))
+const VoiceLog = lazy(() => import('@/features/voice/VoiceLog').then((m) => ({ default: m.VoiceLog })))
 const EntryEditor = lazy(() => import('@/features/food-log/EntryEditor').then((m) => ({ default: m.EntryEditor })))
 const ScanBarcode = lazy(() => import('@/features/barcode/ScanBarcode').then((m) => ({ default: m.ScanBarcode })))
 const Weight = lazy(() => import('@/features/weight/Weight').then((m) => ({ default: m.Weight })))
@@ -63,6 +64,7 @@ export function App() {
           <Route element={<RequireSetup><AppShell /></RequireSetup>}>
             <Route path="/today" element={<Dashboard />} />
             <Route path="/add" element={<AddFood />} />
+            <Route path="/voice" element={<VoiceLog />} />
             <Route path="/scan" element={<ScanBarcode />} />
             <Route path="/entry/:id" element={<EntryEditor />} />
             <Route path="/weight" element={<Weight />} />

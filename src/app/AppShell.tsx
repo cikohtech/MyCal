@@ -22,6 +22,7 @@ export function AppShell() {
   // pressed: the camera screen reads what is cached rather than wait for it.
   usePhotoAllowance(user!.id)
   const fullScreenFlow = pathname.startsWith('/add')
+    || pathname.startsWith('/voice')
     || pathname.startsWith('/scan')
     || pathname.startsWith('/entry')
 

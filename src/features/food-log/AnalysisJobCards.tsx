@@ -1,12 +1,17 @@
 import { useNavigate } from 'react-router-dom'
-import { STAGE_COPY, useAnalysisJobs, type AnalysisJob } from '@/app/analysis-jobs'
+import type { ReactNode } from 'react'
+import { stageCopy, useAnalysisJobs, type AnalysisJob } from '@/app/analysis-jobs'
 import { Button, IconButton, Spinner } from '@/components/Button'
-import { CloseIcon, ImageIcon, PencilIcon, RefreshIcon } from '@/components/Icons'
-import { draftsTotal, failureCopy } from '@/features/food-log/draft'
+import { CloseIcon, ImageIcon, MicIcon, PencilIcon, RefreshIcon } from '@/components/Icons'
+import { canRetryVoice, draftsTotal, failureCopy } from '@/features/food-log/draft'
 import { kcal } from '@/lib/format'
 
+/** Failures where a new recording cannot help either: there is nothing to record into. */
+const NO_RERECORD = new Set(['free_limit_reached', 'no_analysis_service'])
+
 /**
- * A photo that is still being read, sitting on the day it belongs to.
+ * A photo — or a voice log — that is still being read, sitting on the day it
+ * belongs to.
  *
  * This is the whole point of doing the work in the background: the estimate
  * arrives here rather than behind a spinner you had to sit through, and it
@@ -18,7 +23,7 @@ export function AnalysisJobCards({ date }: { date: string }) {
   if (!mine.length) return null
 
   return (
-    <section aria-label="Photos being read" className="mt-4 flex flex-col gap-2.5">
+    <section aria-label="Meals being read" className="mt-4 flex flex-col gap-2.5">
       {mine.map((job) => <JobCard key={job.id} job={job} />)}
     </section>
   )
@@ -29,6 +34,7 @@ function JobCard({ job }: { job: AnalysisJob }) {
   const { retry, discard } = useAnalysisJobs()
 
   const stage = job.stage
+  const voice = job.kind === 'voice'
   const working = stage === 'preparing' || stage === 'uploading' || stage === 'analyzing'
   // An answer with nothing in it is a failure whatever it calls itself; the
   // card below reads `foods[0]`, and a hopeful cast is not worth a crash.
@@ -38,19 +44,29 @@ function JobCard({ job }: { job: AnalysisJob }) {
   const ready = stage === 'ready' && !modelFailed
 
   const total = job.draft?.foods.length ? draftsTotal(job.draft.foods) : null
+  const code = job.draft?.failure_code ?? null
   const copy = modelFailed
-    ? failureCopy(job.draft?.failure_code ?? null, job.draft?.retry_after_seconds)
+    ? failureCopy(code, job.draft?.retry_after_seconds, job.kind)
     : null
+  // Saying the same silence again gets the same answer; a timeout may not.
+  const retryable = !voice || broke || canRetryVoice(code)
+  const rerecord = voice && !retryable && !NO_RERECORD.has(code ?? '')
 
   return (
     <article className="card fade-in overflow-hidden">
       <div className="flex items-center gap-3.5 p-3.5">
-        <Thumb url={job.previewUrl} dim={working} />
+        <Thumb
+          url={job.previewUrl}
+          dim={working}
+          icon={voice
+            ? (job.voice?.input === 'text' ? <PencilIcon size={20} /> : <MicIcon size={20} />)
+            : undefined}
+        />
 
         <div className="min-w-0 flex-1">
           {working && (
             <>
-              <p className="truncate text-[0.98rem] font-semibold">{STAGE_COPY[stage]}</p>
+              <p className="truncate text-[0.98rem] font-semibold">{stageCopy(job)}</p>
               <p className="mt-0.5 text-[0.82rem] leading-snug text-[var(--color-ink-3)]">
                 Keep using the app — this finishes on its own.
               </p>
@@ -81,7 +97,9 @@ function JobCard({ job }: { job: AnalysisJob }) {
 
           {broke && (
             <>
-              <p className="truncate text-[0.98rem] font-semibold">That photo did not go through</p>
+              <p className="truncate text-[0.98rem] font-semibold">
+                {voice ? 'That did not go through' : 'That photo did not go through'}
+              </p>
               <p className="mt-0.5 line-clamp-2 text-[0.82rem] leading-snug text-[var(--color-ink-2)]">
                 {job.error}
               </p>
@@ -101,7 +119,7 @@ function JobCard({ job }: { job: AnalysisJob }) {
           ) : null}
           {!working && (
             <IconButton
-              label="Discard this photo"
+              label={voice ? 'Discard this voice log' : 'Discard this photo'}
               className="hover:text-[var(--color-critical)]"
               onClick={() => discard(job.id)}
             >
@@ -119,14 +137,24 @@ function JobCard({ job }: { job: AnalysisJob }) {
 
       {(modelFailed || broke) && (
         <div className="hairline-t flex flex-wrap gap-2 px-3.5 py-3">
-          <Button size="sm" icon={<RefreshIcon size={15} />} onClick={() => retry(job.id)}>
-            Try again
-          </Button>
+          {retryable && (
+            <Button size="sm" icon={<RefreshIcon size={15} />} onClick={() => retry(job.id)}>
+              Try again
+            </Button>
+          )}
+          {rerecord && (
+            <Button
+              size="sm" icon={<MicIcon size={15} />}
+              onClick={() => { discard(job.id); navigate('/voice') }}
+            >
+              Record again
+            </Button>
+          )}
           <Button
             size="sm" icon={<PencilIcon size={15} />}
             onClick={() => navigate(`/add?job=${job.id}`)}
           >
-            Describe it myself
+            {voice ? 'Add it myself' : 'Describe it myself'}
           </Button>
         </div>
       )}
@@ -134,7 +162,7 @@ function JobCard({ job }: { job: AnalysisJob }) {
   )
 }
 
-function Thumb({ url, dim }: { url: string | null; dim: boolean }) {
+function Thumb({ url, dim, icon }: { url: string | null; dim: boolean; icon?: ReactNode }) {
   return (
     <span
       className="grid h-[52px] w-[52px] shrink-0 place-items-center overflow-hidden rounded-[12px] bg-[var(--color-fill)] text-[var(--color-ink-3)]"
@@ -147,7 +175,7 @@ function Thumb({ url, dim }: { url: string | null; dim: boolean }) {
           style={{ opacity: dim ? 0.6 : 1 }}
         />
       ) : (
-        <ImageIcon size={20} />
+        icon ?? <ImageIcon size={20} />
       )}
     </span>
   )

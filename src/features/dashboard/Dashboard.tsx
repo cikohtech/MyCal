@@ -11,7 +11,7 @@ import { ListGroup, ListRow } from '@/components/List'
 import { EmptyState } from '@/components/EmptyState'
 import { Callout } from '@/components/Callout'
 import {
-  BarcodeIcon, CameraIcon, ChevronLeftIcon, ChevronRightIcon, LedgerIcon, PencilIcon,
+  BarcodeIcon, CameraIcon, ChevronLeftIcon, ChevronRightIcon, LedgerIcon, MicIcon, PencilIcon,
 } from '@/components/Icons'
 import { MealList, mealSegments } from '@/features/dashboard/MealList'
 import { AnalysisJobCards } from '@/features/food-log/AnalysisJobCards'
@@ -99,9 +99,10 @@ export function Dashboard() {
 
       {/* Quick actions, only for the day you are in. */}
       {isToday && (
-        <nav aria-label="Add food" className="mt-3 grid grid-cols-3 gap-2.5">
+        <nav aria-label="Add food" className="mt-3 grid grid-cols-4 gap-2.5">
           {[
             { to: '/add', label: 'Photo', icon: <CameraIcon size={21} /> },
+            { to: '/voice', label: 'Voice', icon: <MicIcon size={21} /> },
             { to: '/scan', label: 'Barcode', icon: <BarcodeIcon size={21} /> },
             { to: '/add?mode=manual', label: 'By hand', icon: <PencilIcon size={21} /> },
           ].map((action) => (
@@ -130,7 +131,7 @@ export function Dashboard() {
               title={isToday ? 'Nothing logged yet' : 'Nothing was logged'}
               body={
                 isToday
-                  ? 'Photograph what you are about to eat, scan a package, or type it in.'
+                  ? 'Photograph what you are about to eat, say what you had, scan a package, or type it in.'
                   : 'Use the strip above to look at any other day.'
               }
               action={isToday ? (

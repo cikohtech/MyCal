@@ -23,6 +23,30 @@ export function draftsTotal(foods: DraftFood[]): NutritionSnapshot {
   )
 }
 
+/** Sources whose numbers a model proposed, rather than a label or a person. */
+export function isAiSource(source: FoodEntry['source']): boolean {
+  return source === 'photo_ai' || source === 'voice_ai'
+}
+
+/**
+ * Gives every food of a voice log a meal. People say the meal once and then
+ * list what was in it — "for breakfast eggs and toast, then a coffee" — so a
+ * food with no meal of its own takes the one spoken before it. Anything said
+ * before any meal was named gets the fallback, the meal the clock suggests.
+ */
+export function fillMeals(foods: DraftFood[], fallback: MealType): DraftFood[] {
+  let current: MealType | null = null
+  return foods.map((food) => {
+    if (food.meal) current = food.meal
+    return { ...food, meal: food.meal ?? current ?? fallback }
+  })
+}
+
+/** True when a voice log's foods belong to more than one meal. */
+export function mixesMeals(foods: DraftFood[], fallback: MealType): boolean {
+  return new Set(foods.map((food) => food.meal ?? fallback)).size > 1
+}
+
 export function blankFood(name = ''): DraftFood {
   return {
     temp_id: tempId('food'),
@@ -94,7 +118,7 @@ export function entryToDraft(entry: FoodEntry): DraftFood {
     quantity_unit: entry.quantity_unit,
     confidence: entry.confidence,
     matched_reference_id: entry.food_reference_id,
-    provenance: entry.source === 'barcode' ? 'label' : entry.source === 'photo_ai' ? 'estimate' : 'reference',
+    provenance: entry.source === 'barcode' ? 'label' : isAiSource(entry.source) ? 'estimate' : 'reference',
     nutrition: entry.nutrition_snapshot,
     ingredients: (entry.parts ?? []).map<DraftPart>((part) => ({
       temp_id: part.id,
@@ -138,11 +162,83 @@ export const ANALYSIS_FAILURES: Record<string, { title: string; body: string }> 
   },
 }
 
-export function failureCopy(code: string | null, retryAfterSeconds?: number | null) {
-  const copy = ANALYSIS_FAILURES[code ?? ''] ?? {
-    title: 'That analysis did not work',
-    body: 'Your photo is saved. Retry, or describe the meal yourself.',
-  }
+/** The same moments, for something said or typed rather than photographed. */
+export const VOICE_FAILURES: Record<string, { title: string; body: string }> = {
+  no_analysis_service: {
+    title: 'No analysis service connected',
+    body: 'MyCal will not invent nutrition numbers from a description. Add the food yourself instead.',
+  },
+  no_transcription_service: {
+    title: 'Voice is not switched on yet',
+    body: 'This server can read a typed description but cannot transcribe speech. Type what you ate instead.',
+  },
+  no_speech: {
+    title: 'Nothing was heard',
+    body: 'The recording came through silent. Check the microphone is not muted and try again, or type it.',
+  },
+  no_food_mentioned: {
+    title: 'No food in what was said',
+    body: 'It did not sound like a description of something you ate. Record it again, or add it yourself.',
+  },
+  unclear_speech: {
+    title: 'That was hard to make out',
+    body: 'Try again somewhere quieter, with the phone a little closer — or type it.',
+  },
+  timeout: {
+    title: 'That took too long',
+    body: 'Nothing is lost. Try again in a moment, or add it yourself.',
+  },
+  rate_limited: {
+    title: 'Too many logs too quickly',
+    body: 'Wait a minute before the next one, or add this one yourself.',
+  },
+  free_limit_reached: {
+    title: 'Your free voice logs are used up',
+    body: 'Logging by voice needs a paid plan from here on. Photos, barcodes and typing a meal in still work.',
+  },
+  service_unavailable: {
+    title: 'The service did not answer',
+    body: 'Nothing is lost. Try again in a moment, or add it yourself.',
+  },
+  offline: {
+    title: 'You are offline',
+    body: 'It is kept on this phone. Try again once you are connected.',
+  },
+  audio_too_large: {
+    title: 'That recording is too long',
+    body: 'Keep it under three minutes, or split the day into two logs.',
+  },
+  unsupported_audio: {
+    title: 'That recording could not be read',
+    body: 'This browser recorded in a format the service could not open. Type what you ate instead.',
+  },
+  text_too_long: {
+    title: 'That is a lot to read at once',
+    body: 'Split it into two logs of a few meals each.',
+  },
+}
+
+/**
+ * Failures a second try can fix. The rest — silence, nothing edible said, a
+ * format the service cannot read — would come back the same, so they offer a
+ * new recording instead.
+ */
+const RETRYABLE_VOICE = new Set(['timeout', 'service_unavailable', 'offline', 'rate_limited'])
+
+export function canRetryVoice(code: string | null | undefined): boolean {
+  return !code || RETRYABLE_VOICE.has(code)
+}
+
+export function failureCopy(
+  code: string | null,
+  retryAfterSeconds?: number | null,
+  kind: 'photo' | 'voice' = 'photo',
+) {
+  const copy = (kind === 'voice' ? VOICE_FAILURES : ANALYSIS_FAILURES)[code ?? ''] ?? (
+    kind === 'voice'
+      ? { title: 'That did not work', body: 'Nothing is lost. Try again, or add it yourself.' }
+      : { title: 'That analysis did not work', body: 'Your photo is saved. Retry, or describe the meal yourself.' }
+  )
   // A limit you can wait out is a different thing from a limit you cannot, so
   // say which one this is rather than leaving someone to guess.
   if (code === 'rate_limited' && retryAfterSeconds && retryAfterSeconds > 0) {

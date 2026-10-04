@@ -26,6 +26,16 @@ export function photosLeft(allowance: PhotoAllowance | null | undefined): number
   return Math.max(0, allowance.free_photo_limit - allowance.photos_analyzed)
 }
 
+/**
+ * Free voice logs still to spend; null when the account is paid, or before the
+ * voice migration has given the plan a count to read.
+ */
+export function voiceLogsLeft(allowance: PhotoAllowance | null | undefined): number | null {
+  if (!allowance || allowance.is_paid) return null
+  if (allowance.free_voice_limit === undefined || allowance.voice_logs_analyzed === undefined) return null
+  return Math.max(0, allowance.free_voice_limit - allowance.voice_logs_analyzed)
+}
+
 export function useEntries(userId: string, date: IsoDate) {
   return useQuery({
     queryKey: keys.entries(userId, date),

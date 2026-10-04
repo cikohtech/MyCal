@@ -5,7 +5,7 @@
  */
 import type {
   AnalysisDraft, BarcodeDraft, FoodEntry, FoodEntryPart, FoodImage, IsoDate,
-  NutritionTarget, PhotoAllowance, Profile, Uuid, WeightEntry,
+  NutritionTarget, PhotoAllowance, Profile, Uuid, VoiceContext, VoiceInput, WeightEntry,
 } from '@/types/domain'
 import type {
   AppUser, DataStore, EntryPatch, NewEntry, NewTarget, SignUpResult,
@@ -13,8 +13,40 @@ import type {
 import { FOOD_IMAGE_BUCKET, requireSupabase } from '@/lib/supabase'
 import { authRedirectUrl, siteUrl } from '@/lib/site'
 import { uuid } from '@/lib/id'
+import { audioExtension, baseAudioType } from '@/services/voice'
 
 const SIGNED_URL_TTL_SECONDS = 60 * 10
+/**
+ * Transcribing and then reading a long description can take most of the two
+ * and a half minutes the platform allows a request. Waiting a little past that
+ * means the client never gives up on an answer that was about to arrive.
+ */
+const VOICE_TIMEOUT_MS = 160_000
+
+function failedDraft(code: string, extra: Partial<AnalysisDraft> = {}): AnalysisDraft {
+  return {
+    status: 'failed', analysis_id: null, model: null, notes: null, foods: [],
+    failure_code: code, ...extra,
+  }
+}
+
+/**
+ * The SDK hands back an error for anything that is not a 2xx. The function
+ * answers its own failures with a 200, so what arrives here is the network or
+ * the platform — and those are worth telling apart, because "you are offline"
+ * and "wait and retry" ask different things of the person.
+ */
+async function voiceFailure(error: unknown): Promise<AnalysisDraft> {
+  if (typeof navigator !== 'undefined' && navigator.onLine === false) return failedDraft('offline')
+  const context = (error as { context?: unknown })?.context
+  if (context instanceof Response) {
+    const body = await context.clone().json().catch(() => null) as Partial<AnalysisDraft> | null
+    if (body?.failure_code) return failedDraft(body.failure_code)
+    if (context.status === 413) return failedDraft('audio_too_large')
+  }
+  const text = `${(error as Error)?.message ?? ''} ${(context as Error)?.name ?? ''} ${(context as Error)?.message ?? ''}`
+  return failedDraft(/abort|timed? ?out/i.test(text) ? 'timeout' : 'service_unavailable')
+}
 
 function toUser(user: { id: string; email?: string } | null | undefined): AppUser | null {
   return user ? { id: user.id, email: user.email ?? null, isLocal: false } : null
@@ -331,14 +363,66 @@ export class SupabaseStore implements DataStore {
     return data
   }
 
+  async analyzeVoice(
+    _userId: Uuid, input: VoiceInput, idempotencyKey: string, context: VoiceContext,
+  ): Promise<AnalysisDraft> {
+    let body: FormData | Record<string, unknown>
+    if (input.kind === 'audio') {
+      // Multipart rather than base64 in JSON: a third smaller on the wire, and
+      // the function can turn an oversized upload away by its declared length.
+      const type = baseAudioType(input.mimeType || input.blob.type)
+      const form = new FormData()
+      form.append('audio', input.blob, `voice.${audioExtension(type)}`)
+      // Some browsers send the part with no type at all; this is the backup.
+      form.append('mime_type', type)
+      form.append('duration_ms', String(Math.round(input.durationMs)))
+      form.append('idempotency_key', idempotencyKey)
+      form.append('timezone', context.timezone)
+      form.append('units', context.units)
+      body = form
+    } else {
+      body = {
+        text: input.text,
+        transcribed: input.transcribed === true,
+        idempotency_key: idempotencyKey,
+        timezone: context.timezone,
+        units: context.units,
+      }
+    }
+
+    try {
+      const { data, error } = await requireSupabase().functions.invoke<AnalysisDraft>(
+        'analyze-food-voice', { body, timeout: VOICE_TIMEOUT_MS },
+      )
+      if (error || !data) return await voiceFailure(error)
+      return data
+    } catch (caught) {
+      return voiceFailure(caught)
+    }
+  }
+
+  async deleteAnalysis(id: Uuid): Promise<void> {
+    const { error } = await requireSupabase().from('ai_analyses').delete().eq('id', id)
+    if (error) fail('Could not remove that analysis', error)
+  }
+
   async getPhotoAllowance(userId: Uuid): Promise<PhotoAllowance | null> {
+    // Every column rather than a list: a project that has not run the voice
+    // migration yet still answers, instead of failing on a column it lacks.
     const { data, error } = await requireSupabase()
-      .from('user_plans').select('is_paid, free_photo_limit, photos_analyzed')
+      .from('user_plans').select('*')
       .eq('user_id', userId).maybeSingle()
     // Not worth an error screen: this only decides what the UI warns about,
     // and the edge function refuses an exhausted account regardless.
-    if (error) return null
-    return data as PhotoAllowance | null
+    if (error || !data) return null
+    const row = data as Record<string, unknown>
+    return {
+      is_paid: Boolean(row.is_paid),
+      free_photo_limit: Number(row.free_photo_limit) || 0,
+      photos_analyzed: Number(row.photos_analyzed) || 0,
+      free_voice_limit: typeof row.free_voice_limit === 'number' ? row.free_voice_limit : undefined,
+      voice_logs_analyzed: typeof row.voice_logs_analyzed === 'number' ? row.voice_logs_analyzed : undefined,
+    }
   }
 
   async lookupBarcode(_userId: Uuid, barcode: string): Promise<BarcodeDraft> {
@@ -361,8 +445,12 @@ export class SupabaseStore implements DataStore {
     const paths = (images ?? []).map((i: { storage_path: string }) => i.storage_path)
     if (paths.length) await client.storage.from(FOOD_IMAGE_BUCKET).remove(paths)
 
-    // food_entry_parts and ai_analyses cascade from their parents.
-    for (const table of ['food_entries', 'food_images', 'weight_entries', 'nutrition_targets']) {
+    // food_entry_parts cascade from their entries. Analyses of photos cascade
+    // from their images, but a voice log has no image — its transcript would
+    // outlive "delete everything" unless it is removed by name.
+    for (const table of [
+      'food_entries', 'food_images', 'ai_analyses', 'weight_entries', 'nutrition_targets',
+    ]) {
       const { error } = await client.from(table).delete().eq('user_id', userId)
       if (error) fail(`Could not clear ${table}`, error)
     }

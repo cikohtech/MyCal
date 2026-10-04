@@ -1,6 +1,6 @@
 import type {
   AnalysisDraft, BarcodeDraft, FoodEntry, FoodEntryPart, FoodImage, IsoDate,
-  NutritionTarget, PhotoAllowance, Profile, Uuid, WeightEntry,
+  NutritionTarget, PhotoAllowance, Profile, Uuid, VoiceContext, VoiceInput, WeightEntry,
 } from '@/types/domain'
 
 export interface AppUser {
@@ -78,6 +78,15 @@ export interface DataStore {
   deleteFoodImage(image: FoodImage): Promise<void>
 
   analyzePhoto(userId: Uuid, image: FoodImage, idempotencyKey: string): Promise<AnalysisDraft>
+  /**
+   * Reads a spoken (or typed) description of a meal. Never throws: a failure
+   * comes back as a draft with a failure code, like a photo's.
+   */
+  analyzeVoice(
+    userId: Uuid, input: VoiceInput, idempotencyKey: string, context: VoiceContext,
+  ): Promise<AnalysisDraft>
+  /** Forgets an analysis nobody kept — a discarded voice log takes its transcript with it. */
+  deleteAnalysis(id: Uuid): Promise<void>
   /** Null where no allowance applies, or it could not be read — the server enforces it either way. */
   getPhotoAllowance(userId: Uuid): Promise<PhotoAllowance | null>
   lookupBarcode(userId: Uuid, barcode: string): Promise<BarcodeDraft>

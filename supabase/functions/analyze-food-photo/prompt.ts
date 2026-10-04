@@ -1,3 +1,5 @@
+import { NUTRITION_SCHEMA } from '../_shared/nutrition.ts'
+
 export const SYSTEM_PROMPT = `You estimate nutrition from a photograph of a meal for a food-tracking app.
 
 What you are doing: naming what is visibly on the plate, estimating how much of it there is, and giving a nutrition estimate for that amount. A person reviews and corrects everything you return before any of it is saved, so your job is an honest starting point, not a verdict.
@@ -58,41 +60,6 @@ export const OUTPUT_SCHEMA = {
   required: ['notes', 'failure_code', 'foods'],
   additionalProperties: false,
   $defs: {
-    nutrition: {
-      type: 'object',
-      properties: {
-        calories_kcal: { type: 'number' },
-        protein_g: { type: 'number' },
-        carbs_g: { type: 'number' },
-        fat_g: { type: 'number' },
-        fibre_g: { type: ['number', 'null'] },
-        micronutrients: {
-          type: 'object',
-          description: 'Only nutrients you have grounds for. Omit the rest.',
-          properties: {
-            sodium_mg: { type: 'number' },
-            potassium_mg: { type: 'number' },
-            calcium_mg: { type: 'number' },
-            iron_mg: { type: 'number' },
-            magnesium_mg: { type: 'number' },
-            zinc_mg: { type: 'number' },
-            vitamin_a_mcg: { type: 'number' },
-            vitamin_c_mg: { type: 'number' },
-            vitamin_d_mcg: { type: 'number' },
-            vitamin_e_mg: { type: 'number' },
-            vitamin_k_mcg: { type: 'number' },
-            vitamin_b6_mg: { type: 'number' },
-            vitamin_b12_mcg: { type: 'number' },
-            folate_mcg: { type: 'number' },
-            sugar_g: { type: 'number' },
-            saturated_fat_g: { type: 'number' },
-            cholesterol_mg: { type: 'number' },
-          },
-          additionalProperties: false,
-        },
-      },
-      required: ['calories_kcal', 'protein_g', 'carbs_g', 'fat_g', 'fibre_g', 'micronutrients'],
-      additionalProperties: false,
-    },
+    nutrition: NUTRITION_SCHEMA,
   },
 } as const

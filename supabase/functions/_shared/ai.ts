@@ -11,6 +11,10 @@
  *   supabase secrets set OPENAI_API_KEY=sk-...        # uses OpenAI
  *   supabase secrets set ANTHROPIC_API_KEY=sk-ant-... # uses Claude
  *   supabase secrets set AI_PROVIDER=openai           # settles it if both exist
+ *
+ * Speech is the exception. Anthropic has no transcription endpoint, so turning
+ * a recording into words always needs OPENAI_API_KEY — even when Claude is the
+ * one reading the words afterwards.
  */
 import Anthropic from 'npm:@anthropic-ai/sdk@0.71.0'
 import OpenAI from 'npm:openai@7.19.0'
@@ -25,10 +29,11 @@ const DEFAULT_MODEL: Record<AiProvider, string> = {
 export interface VisionRequest {
   /** Instructions that frame the whole task. */
   system: string
-  /** The turn's own instruction, alongside the image. */
+  /** The turn's own instruction, alongside the image when there is one. */
   prompt: string
-  imageBase64: string
-  mimeType: string
+  /** Both left out for a text-only request, such as reading a transcript. */
+  imageBase64?: string
+  mimeType?: string
   /** JSON Schema the reply must satisfy. */
   schema: Record<string, unknown>
   /** A name for that schema; OpenAI requires one. */
@@ -98,15 +103,17 @@ function anthropicClient(apiKey: string, model: string): VisionClient {
           messages: [{
             role: 'user',
             content: [
-              {
-                type: 'image',
-                source: {
-                  type: 'base64',
-                  media_type: request.mimeType as 'image/jpeg',
-                  data: request.imageBase64,
-                },
-              },
-              { type: 'text', text: request.prompt },
+              ...(request.imageBase64
+                ? [{
+                  type: 'image' as const,
+                  source: {
+                    type: 'base64' as const,
+                    media_type: (request.mimeType ?? 'image/jpeg') as 'image/jpeg',
+                    data: request.imageBase64,
+                  },
+                }]
+                : []),
+              { type: 'text' as const, text: request.prompt },
             ],
           }],
         },
@@ -143,13 +150,17 @@ function openaiClient(apiKey: string, model: string): VisionClient {
             { role: 'system', content: request.system },
             {
               role: 'user',
-              content: [
-                { type: 'text', text: request.prompt },
-                {
-                  type: 'image_url',
-                  image_url: { url: `data:${request.mimeType};base64,${request.imageBase64}` },
-                },
-              ],
+              content: request.imageBase64
+                ? [
+                  { type: 'text', text: request.prompt },
+                  {
+                    type: 'image_url',
+                    image_url: {
+                      url: `data:${request.mimeType ?? 'image/jpeg'};base64,${request.imageBase64}`,
+                    },
+                  },
+                ]
+                : request.prompt,
             },
           ],
         },
@@ -166,6 +177,78 @@ function openaiClient(apiKey: string, model: string): VisionClient {
       return { text: choice?.message?.content ?? null, refused: false }
     },
   }
+}
+
+/* ------------------------------ transcription ----------------------------- */
+
+const DEFAULT_TRANSCRIBE_MODEL = 'gpt-4o-transcribe'
+/** Older, but it has been there the longest; the one to fall back on. */
+const FALLBACK_TRANSCRIBE_MODEL = 'whisper-1'
+
+export interface TranscriptionRequest {
+  audio: ArrayBuffer
+  /** Without codec parameters: audio/webm, audio/mp4, audio/ogg, ... */
+  mimeType: string
+  /** The provider reads the format off the extension, so this must match the bytes. */
+  filename: string
+  /** Context that steers spelling and number formatting, not content. */
+  prompt?: string
+  timeoutMs: number
+}
+
+export interface Transcriber {
+  model: string
+  /** The words, or an empty string when nothing was said. */
+  transcribe(request: TranscriptionRequest): Promise<{ text: string; model: string }>
+}
+
+/**
+ * Returns a speech-to-text client, or null when there is no OpenAI key — in
+ * which case a typed description still works and a recording cannot.
+ */
+export function resolveTranscriber(): Transcriber | null {
+  const apiKey = Deno.env.get('OPENAI_API_KEY')
+  if (!apiKey) return null
+
+  const client = new OpenAI({ apiKey })
+  const configured = Deno.env.get('OPENAI_TRANSCRIBE_MODEL')?.trim() || DEFAULT_TRANSCRIBE_MODEL
+  const models = [...new Set([configured, FALLBACK_TRANSCRIBE_MODEL])]
+
+  return {
+    model: configured,
+    async transcribe(request) {
+      let lastError: unknown = null
+      for (const model of models) {
+        try {
+          const file = new File([request.audio], request.filename, { type: request.mimeType })
+          const response = await client.audio.transcriptions.create(
+            {
+              file,
+              model,
+              response_format: 'json',
+              ...(request.prompt ? { prompt: request.prompt } : {}),
+            },
+            { timeout: request.timeoutMs },
+          )
+          return { text: (response.text ?? '').trim(), model }
+        } catch (error) {
+          lastError = error
+          // Only a model that does not exist (retired, or a typo in the
+          // secret) is worth a second attempt. Anything else — a timeout, a
+          // file the provider cannot decode — would fail the same way twice.
+          if (!isMissingModel(error)) break
+        }
+      }
+      throw lastError
+    },
+  }
+}
+
+function isMissingModel(error: unknown): boolean {
+  const status = (error as { status?: number })?.status
+  const message = error instanceof Error ? error.message : ''
+  if (status === 404) return true
+  return /model/i.test(message) && /not (found|exist)|does not have access/i.test(message)
 }
 
 /**

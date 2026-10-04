@@ -1,20 +1,24 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { useNavigate, useSearchParams } from 'react-router-dom'
-import type { DraftFood, MealType } from '@/types/domain'
+import type { DraftFood, EntrySource, MealType } from '@/types/domain'
 import { useSession } from '@/app/session'
 import { photosLeft, useCreateEntry, usePhotoAllowance } from '@/app/queries'
 import { useAnalysisJobs } from '@/app/analysis-jobs'
 import { Button, IconButton, Spinner } from '@/components/Button'
 import { Callout } from '@/components/Callout'
+import { SegmentedControl } from '@/components/SegmentedControl'
 import { useToast } from '@/components/Toast'
 import {
-  BarcodeIcon, CameraIcon, CloseIcon, ImageIcon, PencilIcon, PlusIcon, RefreshIcon,
+  BarcodeIcon, CameraIcon, CloseIcon, ImageIcon, MicIcon, PencilIcon, PlusIcon, RefreshIcon,
 } from '@/components/Icons'
 import { DraftFoodCard } from '@/features/food-log/DraftFoodCard'
 import { MealPicker } from '@/features/food-log/MealPicker'
-import { blankFood, draftFoods, draftsTotal, failureCopy, toNewEntry } from '@/features/food-log/draft'
+import {
+  blankFood, canRetryVoice, draftFoods, draftsTotal, failureCopy, fillMeals, mixesMeals, toNewEntry,
+} from '@/features/food-log/draft'
 import { validateImageFile } from '@/services/camera'
 import { suggestMeal } from '@/lib/meals'
+import { addDays, friendlyDate } from '@/lib/dates'
 import { uuid } from '@/lib/id'
 import { kcal } from '@/lib/format'
 
@@ -23,7 +27,7 @@ import { kcal } from '@/lib/format'
  *
  *   /add              the viewfinder
  *   /add?mode=manual  a blank entry to type
- *   /add?job=<id>     the review for a photo that was read in the background
+ *   /add?job=<id>     the review for a photo, or a voice log, read in the background
  *
  * Taking a picture no longer blocks: the shutter hands the frame to the job
  * queue and returns you to your day, and the estimate turns up as a card there.
@@ -58,6 +62,8 @@ export function AddFood() {
   const [error, setError] = useState<string | null>(null)
   const [saving, setSaving] = useState(false)
   const [idempotencyKey] = useState(() => uuid())
+  /** A voice log can be about last night; it is logged to the day it describes. */
+  const [day, setDay] = useState<'today' | 'yesterday'>('today')
   /** Which draft this screen has already loaded, so edits are never clobbered. */
   const loadedDraft = useRef<string | null>(null)
 
@@ -91,7 +97,17 @@ export function AddFood() {
       const stamp = job.draft.analysis_id ?? job.idempotencyKey
       if (loadedDraft.current === stamp) return
       loadedDraft.current = stamp
-      setFoods(job.draft.foods.length ? draftFoods(job.draft) : [blankFood()])
+      const loaded = job.draft.foods.length ? draftFoods(job.draft) : [blankFood()]
+      if (job.kind === 'voice') {
+        // Every food gets the meal it was spoken under, so the save below
+        // never has to guess; the picker starts on the first of them.
+        const filled = fillMeals(loaded, job.meal)
+        setFoods(filled)
+        setMeal(filled[0]?.meal ?? job.meal)
+        setDay(job.draft.day === 'yesterday' ? 'yesterday' : 'today')
+      } else {
+        setFoods(loaded)
+      }
       return
     }
     // Nothing came back at all — give them something to type into rather than
@@ -135,8 +151,7 @@ export function AddFood() {
       for (const [index, food] of usable.entries()) {
         await createEntry.mutateAsync({
           entry: toNewEntry(
-            food, meal, job?.consumedOn ?? today,
-            job?.image ? 'photo_ai' : 'manual',
+            food, food.meal ?? meal, consumedOn, source,
             { analysisId: job?.draft?.analysis_id ?? null, imageId: job?.image?.id ?? null },
             true,
           ),
@@ -145,8 +160,9 @@ export function AddFood() {
         })
       }
       if (jobId) complete(jobId)
-      toast.done(usable.length === 1 ? 'Saved to today' : `${usable.length} foods saved to today`)
-      navigate('/today')
+      toast.done(usable.length === 1 ? `Saved to ${dayWord}` : `${usable.length} foods saved to ${dayWord}`)
+      // Straight to the day it landed on, so a log for last night is seen there.
+      navigate(consumedOn === today ? '/today' : `/today?date=${consumedOn}`)
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : 'Could not save that.')
     } finally {
@@ -155,6 +171,19 @@ export function AddFood() {
   }
 
   const total = useMemo(() => draftsTotal(foods), [foods])
+
+  const isVoice = job?.kind === 'voice'
+  const baseDay = job?.consumedOn ?? today
+  const consumedOn = isVoice && day === 'yesterday' ? addDays(baseDay, -1) : baseDay
+  const dayName = friendlyDate(consumedOn, today)
+  /** "today", "yesterday" — or a date, which keeps its capitals. */
+  const dayWord = dayName === 'Today' || dayName === 'Yesterday' ? dayName.toLowerCase() : dayName
+  const heard = isVoice && job?.draft?.status !== 'failed' && (job?.draft?.foods.length ?? 0) > 0
+  const source: EntrySource = isVoice
+    ? (heard ? 'voice_ai' : 'manual')
+    : job?.image ? 'photo_ai' : 'manual'
+  const mixed = isVoice && mixesMeals(foods, meal)
+  const transcript = isVoice ? (job?.draft?.transcript ?? job?.transcript ?? null) : null
 
   /* ------------------------------ viewfinder ----------------------------- */
 
@@ -212,7 +241,7 @@ export function AddFood() {
           </p>
         )}
 
-        <div className="flex items-center justify-center gap-12 px-9 pb-safe pt-6">
+        <div className="flex items-center justify-center gap-10 px-9 pb-safe pt-6">
           {/* A library photo would be turned away just the same, so the free
               way to log a packet takes its place. */}
           {outOfPhotos ? (
@@ -233,6 +262,17 @@ export function AddFood() {
               Library
             </button>
           )}
+
+          {/* Talking costs nothing from the photo allowance, so it stays
+              offered when the photos have run out. */}
+          <button
+            type="button"
+            onClick={() => navigate('/voice', { replace: true })}
+            className="press flex flex-col items-center gap-1.5 text-[0.72rem] font-medium text-white/80"
+          >
+            <MicIcon size={24} />
+            Voice
+          </button>
 
           <button
             type="button"
@@ -294,11 +334,16 @@ export function AddFood() {
 
   const modelFailed = job?.draft?.status === 'failed'
   const jobBroke = job?.stage === 'failed'
+  const failureCode = job?.draft?.failure_code ?? null
   const copy = modelFailed
-    ? failureCopy(job!.draft!.failure_code, job!.draft!.retry_after_seconds)
+    ? failureCopy(failureCode, job!.draft!.retry_after_seconds, job!.kind)
     : jobBroke
-      ? { title: 'That photo did not go through', body: job!.error ?? 'Try again, or describe the meal yourself.' }
+      ? {
+        title: isVoice ? 'That did not go through' : 'That photo did not go through',
+        body: job!.error ?? 'Try again, or describe the meal yourself.',
+      }
       : null
+  const canRetry = !isVoice || jobBroke || canRetryVoice(failureCode)
 
   return (
     <>
@@ -308,9 +353,11 @@ export function AddFood() {
             {job ? 'Check the estimate' : 'Add it by hand'}
           </h1>
           <p className="mt-1.5 max-w-[36ch] text-[0.88rem] leading-snug text-[var(--color-ink-2)]">
-            {job
-              ? 'Change anything that is wrong. Nothing has been logged yet.'
-              : 'Type what you ate and roughly what was in it.'}
+            {isVoice && heard
+              ? 'This is what was heard. Change anything that is wrong — nothing has been logged yet.'
+              : job
+                ? 'Change anything that is wrong. Nothing has been logged yet.'
+                : 'Type what you ate and roughly what was in it.'}
           </p>
         </div>
         <IconButton label="Cancel" tone="filled" onClick={leave}>
@@ -325,16 +372,31 @@ export function AddFood() {
         />
       )}
 
+      {transcript && (
+        <Transcript text={transcript} typed={job?.voice?.input === 'text'} />
+      )}
+
       {copy && (
         <Callout tone="problem" title={copy.title} className="mb-4"
           action={jobId ? (
             <div className="flex flex-wrap gap-2">
-              <Button size="sm" icon={<RefreshIcon size={16} />} onClick={() => retry(jobId)}>
-                Try again
-              </Button>
-              <Button size="sm" variant="danger" onClick={() => { discard(jobId); navigate('/add?mode=manual', { replace: true }) }}>
-                Delete the photo
-              </Button>
+              {canRetry && (
+                <Button size="sm" icon={<RefreshIcon size={16} />} onClick={() => retry(jobId)}>
+                  Try again
+                </Button>
+              )}
+              {isVoice ? (
+                <Button
+                  size="sm" icon={<MicIcon size={16} />}
+                  onClick={() => { discard(jobId); navigate('/voice', { replace: true }) }}
+                >
+                  Record again
+                </Button>
+              ) : (
+                <Button size="sm" variant="danger" onClick={() => { discard(jobId); navigate('/add?mode=manual', { replace: true }) }}>
+                  Delete the photo
+                </Button>
+              )}
             </div>
           ) : undefined}
         >
@@ -354,6 +416,15 @@ export function AddFood() {
             defaultOpen={foods.length === 1 || (food.confidence !== null && food.confidence < 0.55)}
             onChange={(next) => setFoods(foods.map((f, i) => (i === index ? next : f)))}
             onRemove={() => setFoods(foods.filter((_, i) => i !== index))}
+            // A voice log files each food under its own meal, so each one can
+            // be moved on its own. Only one food: the picker below does it.
+            {...(isVoice && foods.length > 1 ? {
+              meal: food.meal ?? meal,
+              onMealChange: (next: MealType) => setFoods(
+                foods.map((f, i) => (i === index ? { ...f, meal: next } : f)),
+              ),
+              showMeal: mixed,
+            } : {})}
           />
         ))}
       </div>
@@ -365,25 +436,82 @@ export function AddFood() {
         Add another food
       </Button>
 
-      <div className="card mt-5 p-4">
-        <MealPicker
-          value={meal}
-          onChange={(next) => { setMeal(next); if (jobId) setJobMeal(jobId, next) }}
-        />
+      <div className="card mt-5 flex flex-col gap-5 p-4">
+        {isVoice && (
+          <div>
+            <p className="group-label px-0 pb-2.5">Which day?</p>
+            <SegmentedControl
+              label="Which day?"
+              value={day}
+              onChange={setDay}
+              options={[
+                { value: 'today', label: friendlyDate(baseDay, today) },
+                { value: 'yesterday', label: friendlyDate(addDays(baseDay, -1), today) },
+              ]}
+            />
+          </div>
+        )}
+        {mixed ? (
+          <p className="text-[0.86rem] leading-snug text-[var(--color-ink-2)]">
+            Each food goes to the meal you mentioned it with. Open one to move it.
+          </p>
+        ) : (
+          <MealPicker
+            value={meal}
+            onChange={(next) => {
+              setMeal(next)
+              if (jobId) setJobMeal(jobId, next)
+              // One picker for the lot: every food moves with it.
+              if (isVoice) setFoods(foods.map((f) => ({ ...f, meal: next })))
+            }}
+          />
+        )}
       </div>
 
       {error && <Callout tone="problem" className="mt-4">{error}</Callout>}
 
       <div className="glass-canvas hairline-t sticky bottom-0 -mx-4 mt-6 px-4 pb-safe pt-3">
         <div className="mb-2 flex items-baseline justify-between px-0.5 text-[0.88rem]">
-          <span className="text-[var(--color-ink-2)]">Adds to today</span>
+          <span className="text-[var(--color-ink-2)]">Adds to {dayWord}</span>
           <span className="tnum text-[1.08rem] font-semibold">{kcal(total.calories_kcal)} kcal</span>
         </div>
         <Button variant="primary" size="lg" full loading={saving} onClick={save}>
-          Save to today
+          Save to {dayWord}
         </Button>
       </div>
     </>
+  )
+}
+
+/**
+ * What a voice log heard, shown above the foods drawn from it: when something
+ * is wrong, this is where the person can see whether it was heard wrong or
+ * read wrong.
+ */
+function Transcript({ text, typed }: { text: string; typed: boolean }) {
+  const [expanded, setExpanded] = useState(false)
+  const long = text.length > 220
+  return (
+    <figure className="card mb-4 p-4">
+      <figcaption className="group-label flex items-center gap-1.5 px-0 pb-2">
+        {typed ? <PencilIcon size={14} /> : <MicIcon size={14} />}
+        {typed ? 'What you wrote' : 'What you said'}
+      </figcaption>
+      <blockquote
+        className={`whitespace-pre-line text-[0.92rem] leading-relaxed text-[var(--color-ink-2)] ${long && !expanded ? 'line-clamp-4' : ''}`}
+      >
+        {text}
+      </blockquote>
+      {long && (
+        <button
+          type="button"
+          onClick={() => setExpanded(!expanded)}
+          className="press mt-1.5 text-[0.84rem] font-medium text-[var(--color-tint)]"
+        >
+          {expanded ? 'Show less' : 'Show all'}
+        </button>
+      )}
+    </figure>
   )
 }
 

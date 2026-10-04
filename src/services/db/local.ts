@@ -5,7 +5,7 @@
  */
 import type {
   AnalysisDraft, BarcodeDraft, FoodEntry, FoodImage, IsoDate, NutritionTarget,
-  Profile, Uuid, WeightEntry,
+  Profile, Uuid, VoiceInput, WeightEntry,
 } from '@/types/domain'
 import type {
   AppUser, DataStore, EntryPatch, NewEntry, NewTarget, SignUpResult,
@@ -307,6 +307,25 @@ export class LocalStore implements DataStore {
       failure_code: 'no_analysis_service',
     }
   }
+
+  /**
+   * No model on this device either. What was typed is handed back as the
+   * transcript, so the review can show it while the person enters the food.
+   */
+  async analyzeVoice(_userId: Uuid, input: VoiceInput): Promise<AnalysisDraft> {
+    return {
+      status: 'failed',
+      analysis_id: null,
+      model: null,
+      notes: null,
+      foods: [],
+      failure_code: 'no_analysis_service',
+      transcript: input.kind === 'text' ? input.text : null,
+    }
+  }
+
+  /** Nothing was recorded here to forget. */
+  async deleteAnalysis(): Promise<void> {}
 
   /** No model here, so nothing to ration. */
   async getPhotoAllowance(): Promise<null> {

@@ -13,7 +13,7 @@ import { TrashIcon } from '@/components/Icons'
 import { NavBar } from '@/components/NavBar'
 import { DraftFoodCard } from '@/features/food-log/DraftFoodCard'
 import { MealPicker } from '@/features/food-log/MealPicker'
-import { draftTotal, entryToDraft } from '@/features/food-log/draft'
+import { draftTotal, entryToDraft, isAiSource } from '@/features/food-log/draft'
 
 import { friendlyDate } from '@/lib/dates'
 import { kcal } from '@/lib/format'
@@ -131,7 +131,7 @@ export function EntryEditor() {
         <p className="mt-1.5 flex flex-wrap items-center gap-x-2.5 gap-y-1 text-[0.84rem] text-[var(--color-ink-3)]">
           <span>Logged for {friendlyDate(entry.consumed_on, today).toLowerCase()}</span>
           <EstimateTag
-            provenance={entry.user_corrected ? 'corrected' : entry.source === 'barcode' ? 'label' : entry.source === 'photo_ai' ? 'estimate' : 'reference'}
+            provenance={entry.user_corrected ? 'corrected' : entry.source === 'barcode' ? 'label' : isAiSource(entry.source) ? 'estimate' : 'reference'}
           />
         </p>
       </header>
@@ -156,7 +156,7 @@ export function EntryEditor() {
 
       <Callout tone="note" className="mt-4">
         Changing these values updates {friendlyDate(entry.consumed_on, today).toLowerCase()}'s
-        totals only. The original {entry.source === 'photo_ai' ? 'estimate' : 'record'} is kept
+        totals only. The original {isAiSource(entry.source) ? 'estimate' : 'record'} is kept
         as the source on this entry.
       </Callout>
 

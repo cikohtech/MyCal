@@ -5,7 +5,7 @@ import type { ActivityLevel, Goal, SexForBmr, UnitPreference } from '@/types/dom
 import { useSession } from '@/app/session'
 import {
   photosLeft, useCreateTarget, usePhotoAllowance, useSaveProfile, useTargetOn, useTargets,
-  useWeights,
+  useWeights, voiceLogsLeft,
 } from '@/app/queries'
 import { store } from '@/services/db'
 import { Button } from '@/components/Button'
@@ -15,7 +15,7 @@ import { ListGroup, ListRow } from '@/components/List'
 import { Sheet } from '@/components/Sheet'
 import { Callout } from '@/components/Callout'
 import { useToast } from '@/components/Toast'
-import { CameraIcon, LogOutIcon, PencilIcon, ShieldIcon, TrashIcon } from '@/components/Icons'
+import { CameraIcon, LogOutIcon, MicIcon, PencilIcon, ShieldIcon, TrashIcon } from '@/components/Icons'
 import { ACTIVITY_LABELS, GOAL_LABELS, bmiBand, buildTarget } from '@/lib/calc'
 import { friendlyDate, supportedTimezones } from '@/lib/dates'
 import { height as formatHeight, kcal, weight as formatWeight } from '@/lib/format'
@@ -36,6 +36,7 @@ export function Profile() {
   const weightsQuery = useWeights(userId)
   const allowance = usePhotoAllowance(userId).data
   const freeLeft = photosLeft(allowance)
+  const voiceLeft = voiceLogsLeft(allowance)
 
   const [editing, setEditing] = useState(false)
   const [confirmWipe, setConfirmWipe] = useState(false)
@@ -263,6 +264,26 @@ export function Profile() {
                   : `${freeLeft} of ${allowance.free_photo_limit} left`
               }
             />
+            {/* Only once the project has the voice migration, and so a count. */}
+            {allowance.free_voice_limit !== undefined && (
+              <ListRow
+                icon={<MicIcon size={17} />}
+                iconTone={voiceLeft === 0 ? 'var(--color-critical)' : 'var(--color-tint)'}
+                title="Voice logs"
+                detail={
+                  allowance.is_paid
+                    ? 'Logging by voice without a cap'
+                    : voiceLeft === 0
+                      ? 'Logging by voice needs a paid plan.'
+                      : `${allowance.free_voice_limit} voice logs, then a paid plan`
+                }
+                value={
+                  allowance.is_paid
+                    ? `${allowance.voice_logs_analyzed ?? 0} used`
+                    : `${voiceLeft} of ${allowance.free_voice_limit} left`
+                }
+              />
+            )}
           </ListGroup>
         </div>
       )}
@@ -288,7 +309,7 @@ export function Profile() {
           label="Your data"
           note={
             store.kind === 'supabase'
-              ? 'Photos sit in private storage only your account can read, and every record is restricted to your user id at the database level.'
+              ? 'Photos sit in private storage only your account can read, and every record is restricted to your user id at the database level. Voice recordings are never stored — only the words they were turned into.'
               : 'Everything is stored in this browser only. Clearing site data removes it permanently.'
           }
         >
@@ -442,7 +463,7 @@ export function Profile() {
         open={confirmWipe}
         onClose={() => setConfirmWipe(false)}
         title="Delete everything?"
-        description="Your profile, targets, food entries, photos and weight history."
+        description="Your profile, targets, food entries, photos, voice transcripts and weight history."
         footer={
           <div className="flex gap-2.5">
             <Button full size="lg" onClick={() => setConfirmWipe(false)} data-autofocus>Keep my data</Button>
